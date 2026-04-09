@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Битва за очко | Game Hub</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+</head>
+<body>
+  <div class="app-shell">
+    <div class="brand-card">
+      <h1>Битва за очко</h1>
+      <p>Game Hub — подборка онлайн-игр с одной центральной площадкой и яркими карточками.</p>
+    </div>
+
+    <section id="login-screen" class="card screen active">
+      <h2>Вход</h2>
+      <label>Твой никнейм</label>
+      <input id="nickname" type="text" placeholder="Введите ник" maxlength="16" />
+      <button id="loginButton" class="primary" onclick="login()">Войти</button>
+      <p class="hint">Ник сохраняется в localStorage и будет автоматически подставляться при повторном входе.</p>
+    </section>
+
+    <section id="main-menu" class="card screen">
+      <h2>Главное меню</h2>
+      <div class="menu-buttons">
+        <button id="playButton" class="big-button">🎮 Играть</button>
+        <button id="statsButton" class="big-button secondary">📊 Статистика</button>
+      </div>
+      <div class="info-card">
+        <h3>Инструкция</h3>
+        <p>Войдите, выберите игру на игровом стенде и подключитесь к комнате.</p>
+        <p>У каждой игры свои правила — начните матч и наслаждайтесь турниром вместе с друзьями.</p>
+      </div>
+    </section>
+
+    <section id="choose-screen" class="card screen">
+      <h2>Выбери игру</h2>
+      <div class="game-grid">
+        <div class="game-card active spy-card" id="spy-card">
+          <img src="images/spy-game.png" alt="Шпион" style="width: 100%; height: 150px; object-fit: cover;">
+          <div class="game-card-info">
+            <div>
+              <h3>Шпион</h3>
+              <p>Онлайн-комнаты, вопросы и голосование.</p>
+            </div>
+            <button class="play-now">Выбрать</button>
+          </div>
+        </div>
+        <div class="game-card codenames-card" id="codenames-card">
+          <div class="card-image"></div>
+          <div class="game-card-info">
+            <div>
+              <h3>Код Неймс</h3>
+              <p>25 слов, две команды и тайный ключ.</p>
+            </div>
+            <button class="play-now">Выбрать</button>
+          </div>
+        </div>
+        <div class="game-card locked shooter-card">
+          <div class="card-image"></div>
+          <div class="game-card-info">
+            <div>
+              <h3>Головоломка</h3>
+              <p>Логические задачи для одиночной игры.</p>
+            </div>
+            <button disabled>Скоро</button>
+          </div>
+        </div>
+        <div class="game-card locked racing-card">
+          <div class="card-image"></div>
+          <div class="game-card-info">
+            <div>
+              <h3>Гонка</h3>
+              <p>Скорость, трюки и борьба за первое место.</p>
+            </div>
+            <button disabled>Скоро</button>
+          </div>
+        </div>
+      </div>
+      <button id="backToMenu" class="secondary">Назад</button>
+    </section>
+
+    <section id="lobby-screen" class="card screen">
+      <h2>Игровая комната</h2>
+      <div class="lobby-columns">
+        <div class="lobby-panel">
+          <div class="lobby-row">
+            <button id="findRoomButton" class="primary">Создать / Присоединиться</button>
+            <button id="refreshRooms" class="secondary">Обновить</button>
+          </div>
+          <div class="room-list" id="roomList"></div>
+        </div>
+        <div class="lobby-panel">
+          <div class="room-info" id="roomInfo"></div>
+          <div class="players-list" id="playersList"></div>
+          <div class="room-actions" id="roomActions"></div>
+          <div class="chat-panel">
+            <div class="chat-header">Чат комнаты</div>
+            <div class="chat-messages" id="chatMessages"></div>
+            <div class="chat-input-row">
+              <input id="chatInput" placeholder="Задать вопрос или написать сообщение" />
+              <button id="sendChat" class="secondary">Отправить</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <button id="backToChoose" class="secondary">Назад</button>
+    </section>
+
+    <section id="table-screen" class="screen">
+      <div class="table-top">
+        <div class="table-header">
+          <h2 id="tableTitle">Стол игры</h2>
+        </div>
+
+        <div class="table-content">
+          <div class="left-panel">
+            <div class="players-on-table" id="playersOnTable"></div>
+          </div>
+
+          <div class="center-panel">
+            <div class="cards-grid" id="cardsGrid"></div>
+            <div class="player-role" id="playerRole"></div>
+          </div>
+
+          <div class="right-panel">
+            <div class="chat-title">Чат</div>
+            <div class="table-chat" id="tableChat"></div>
+            <div class="chat-input-row">
+              <input id="tableChatInput" placeholder="Сообщение" />
+              <button id="tableSendChat" class="secondary">Отправить</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="vote-prompt" id="votePrompt" style="display: none;">
+          <h3 id="votePromptText"></h3>
+          <div class="vote-buttons">
+            <button id="voteYes" class="primary">ДА</button>
+            <button id="voteNo" class="secondary">НЕТ</button>
+          </div>
+        </div>
+
+        <div class="modal" id="hintModal" style="display: none;">
+          <div class="modal-card">
+            <h3>Напишите подсказку для команды</h3>
+            <input type="text" id="hintInput" placeholder="Подсказка..." maxlength="50" style="width: 100%; padding: 10px; margin: 10px 0;">
+            <div style="display: flex; gap: 10px;">
+              <button id="sendHintBtn" class="primary" style="flex: 1;">Отправить</button>
+              <button id="cancelHintBtn" class="secondary" style="flex: 1;">Отмена</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="modal" id="statsModal">
+      <div class="modal-card">
+        <h3>Статистика</h3>
+        <div id="statsContent"></div>
+        <button id="closeStats" class="secondary">Закрыть</button>
+      </div>
+    </div>
+
+    <div class="message-box" id="messageBox"></div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>

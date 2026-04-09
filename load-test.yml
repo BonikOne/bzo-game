@@ -1,0 +1,56 @@
+config:
+  target: 'http://localhost:80'  # Use nginx load balancer
+  phases:
+    - duration: 60
+      arrivalRate: 10  # 10 users per second
+      name: "Warm up phase"
+    - duration: 300
+      arrivalRate: 50  # 50 users per second
+      name: "Load phase"
+    - duration: 60
+      arrivalRate: 100  # 100 users per second
+      name: "Peak load phase"
+  defaults:
+    headers:
+      Content-Type: 'application/json'
+
+scenarios:
+  - name: "Game session simulation"
+    weight: 80
+    flow:
+      - get:
+          url: "/"
+      - think: 2
+      - post:
+          url: "/api/login"
+          json:
+            nickname: "LoadTestUser{{ $randomInt }}"
+      - think: 1
+      - post:
+          url: "/api/join-game"
+          json:
+            gameType: "spy"
+      - think: 3
+      - post:
+          url: "/api/start-game"
+      - think: 5
+      - post:
+          url: "/api/chat"
+          json:
+            message: "Hello from load test!"
+      - think: 10
+      - post:
+          url: "/api/leave-game"
+
+  - name: "Browse and spectate"
+    weight: 20
+    flow:
+      - get:
+          url: "/"
+      - think: 1
+      - get:
+          url: "/api/rooms"
+      - think: 5
+      - get:
+          url: "/api/stats"
+      - think: 3
