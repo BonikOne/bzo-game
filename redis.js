@@ -1,26 +1,37 @@
 const redis = require('redis');
 
+const REDIS_HOST = process.env.REDIS_HOST || 'localhost';
+const REDIS_PORT = process.env.REDIS_PORT || 6379;
+const REDIS_PASSWORD = process.env.REDIS_PASSWORD || undefined;
+
+const redisUrl = REDIS_PASSWORD
+  ? `redis://:${encodeURIComponent(REDIS_PASSWORD)}@${REDIS_HOST}:${REDIS_PORT}`
+  : `redis://${REDIS_HOST}:${REDIS_PORT}`;
+
 // Redis client configuration
 const redisClient = redis.createClient({
-  host: process.env.REDIS_HOST || 'localhost',
-  port: process.env.REDIS_PORT || 6379,
-  password: process.env.REDIS_PASSWORD || undefined,
-  retry_strategy: (options) => {
-    if (options.error && options.error.code === 'ECONNREFUSED') {
-      console.error('Redis connection refused');
-      return new Error('Redis connection refused');
+  url: redisUrl,
+  socket: {
+    reconnectStrategy: (retries) => {
+      if (retries > 10) {
+        console.error('Redis max attempts reached');
+        return new Error('Redis max attempts reached');
+      }
+      return Math.min(retries * 100, 3000);
     }
-    if (options.total_retry_time > 1000 * 60 * 60) {
-      console.error('Redis retry time exhausted');
-      return new Error('Retry time exhausted');
-    }
-    if (options.attempt > 10) {
-      console.error('Redis max attempts reached');
-      return undefined;
-    }
-    // Exponential backoff
-    return Math.min(options.attempt * 100, 3000);
   }
+});
+
+async function initRedis() {
+  try {
+    await redisClient.connect();
+  } catch (err) {
+    console.error('Redis connect failed:', err);
+  }
+}
+
+initRedis().catch((err) => {
+  console.error('Redis initialization failed:', err);
 });
 
 redisClient.on('error', (err) => {

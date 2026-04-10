@@ -39,17 +39,23 @@ if (cluster.isMaster && process.env.NUM_WORKERS > 1) {
   logger.info('Socket.IO server initialized');
 
   // Use Redis adapter for cross-process communication if Redis is available
-  if (process.env.REDIS_HOST) {
-    try {
-      const pubClient = redisClient.duplicate();
-      const subClient = redisClient.duplicate();
-      io.adapter(createAdapter(pubClient, subClient));
-      console.log('Redis adapter enabled for Socket.IO');
-    } catch (error) {
-      console.log('Redis adapter not available, using in-memory adapter');
-    }
-  } else {
+  setupSocketAdapter();
+}
+
+async function setupSocketAdapter() {
+  if (!process.env.REDIS_HOST) {
     console.log('No Redis host configured, using in-memory adapter');
+    return;
+  }
+
+  try {
+    const pubClient = redisClient.duplicate();
+    const subClient = redisClient.duplicate();
+    await Promise.all([pubClient.connect(), subClient.connect()]);
+    io.adapter(createAdapter(pubClient, subClient));
+    console.log('Redis adapter enabled for Socket.IO');
+  } catch (error) {
+    console.log('Redis adapter not available, using in-memory adapter', error);
   }
 }
 
