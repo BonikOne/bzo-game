@@ -7,6 +7,13 @@ class RoomManager {
     this.useRedis = process.env.REDIS_HOST !== undefined;
   }
 
+  // Serialize room for Redis storage, excluding timer/circular fields
+  serializeRoom(room) {
+    if (!room || typeof room !== 'object') return room;
+    const { phaseInterval, ...safeRoom } = room;
+    return safeRoom;
+  }
+
   // Generate unique room ID
   generateRoomId() {
     return `room-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -56,7 +63,7 @@ class RoomManager {
 
     try {
       if (this.useRedis) {
-        await this.redis.set(`room:${roomId}`, JSON.stringify(room));
+        await this.redis.set(`room:${roomId}`, JSON.stringify(this.serializeRoom(room)));
         await this.redis.expire(`room:${roomId}`, 24 * 60 * 60); // 24 hours TTL
       } else {
         this.inMemoryRooms.set(roomId, room);
@@ -84,7 +91,7 @@ class RoomManager {
       // Update last activity
       room.lastActivity = Date.now();
       if (this.useRedis) {
-        await this.redis.set(`room:${roomId}`, JSON.stringify(room));
+        await this.redis.set(`room:${roomId}`, JSON.stringify(this.serializeRoom(room)));
       } else {
         this.inMemoryRooms.set(roomId, room);
       }
@@ -100,7 +107,7 @@ class RoomManager {
     try {
       roomData.lastActivity = Date.now();
       if (this.useRedis) {
-        await this.redis.set(`room:${roomId}`, JSON.stringify(roomData));
+        await this.redis.set(`room:${roomId}`, JSON.stringify(this.serializeRoom(roomData)));
       } else {
         this.inMemoryRooms.set(roomId, roomData);
       }
