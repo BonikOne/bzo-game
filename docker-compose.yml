@@ -33,7 +33,7 @@ services:
       timeout: 10s
       retries: 3
 
-  # Game server (multiple instances for load balancing)
+  # Game server (single instance)
   app:
     build: .
     environment:
@@ -50,12 +50,10 @@ services:
       redis:
         condition: service_healthy
     ports:
-      - "3000-3002:3000"  # Multiple ports for multiple instances
+      - "3000:3000"
     volumes:
       - ./logs:/app/logs
     restart: unless-stopped
-    deploy:
-      replicas: 5  # Scale to 5 instances for high concurrency
 
   # Nginx load balancer
   nginx:
