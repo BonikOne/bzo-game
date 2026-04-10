@@ -4,14 +4,15 @@ class RoomManager {
   constructor() {
     this.redis = redisClient;
     this.inMemoryRooms = new Map(); // Fallback for development
+    this.phaseIntervals = new Map(); // Store phase timers by roomId
     this.useRedis = process.env.REDIS_HOST !== undefined;
   }
 
   // Serialize room for Redis storage, excluding timer/circular fields
   serializeRoom(room) {
     if (!room || typeof room !== 'object') return room;
-    const { phaseInterval, ...safeRoom } = room;
-    return safeRoom;
+    // No fields to exclude currently
+    return room;
   }
 
   // Generate unique room ID
@@ -121,6 +122,13 @@ class RoomManager {
   // Delete room from Redis or in-memory
   async deleteRoom(roomId) {
     try {
+      // Clear any active timer
+      const intervalId = this.phaseIntervals.get(roomId);
+      if (intervalId) {
+        clearInterval(intervalId);
+        this.phaseIntervals.delete(roomId);
+      }
+
       if (this.useRedis) {
         await this.redis.del(`room:${roomId}`);
       } else {

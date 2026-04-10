@@ -46,13 +46,8 @@ function setupGameHandlers(io) {
         socket.data.nickname = nickname;
         socket.data.gameType = gameType;
 
-        // Find available room or create new one
-        let room = await roomManager.findAvailableRoom(gameType);
-        if (!room) {
-          room = await roomManager.createRoom({ id: socket.id, nickname }, gameType);
-        } else {
-          await roomManager.joinRoom(room.id, nickname, socket.id);
-        }
+        // Always create a new room
+        let room = await roomManager.createRoom({ id: socket.id, nickname }, gameType);
 
         socket.data.roomId = room.id;
         socket.join(room.id);
@@ -246,7 +241,8 @@ function setupGameHandlers(io) {
         room.hint = hint.trim();
         room.phase = 'guessing';
         room.phaseTimer = 90;
-        clearInterval(room.phaseInterval);
+        clearInterval(roomManager.phaseIntervals.get(room.id));
+        roomManager.phaseIntervals.delete(room.id);
         startPhaseTimer(room, io);
         io.to(room.id).emit('gameMessage', { system: true, text: `Капитан ${socket.data.nickname} дал подсказку: "${room.hint}"` });
         io.to(room.id).emit('phaseChanged', { phase: room.phase, hint: room.hint, phaseTimer: room.phaseTimer });
@@ -293,7 +289,8 @@ function setupGameHandlers(io) {
             room.phaseTimer = 60;
             room.playerSelections = {};
             room.playerPasses = [];
-            clearInterval(room.phaseInterval);
+            clearInterval(roomManager.phaseIntervals.get(room.id));
+            roomManager.phaseIntervals.delete(room.id);
             startPhaseTimer(room, io);
             io.to(room.id).emit('gameMessage', { system: true, text: `Команда ${playerTeam === 'red' ? 'Красная' : 'Синяя'} передала ход. Теперь ход у команды ${room.currentTeam === 'red' ? 'Красной' : 'Синей'}.` });
             io.to(room.id).emit('turnChanged', { currentTeam: room.currentTeam, phase: room.phase, hint: room.hint, phaseTimer: room.phaseTimer });
@@ -355,7 +352,8 @@ function setupGameHandlers(io) {
               room.phaseTimer = 60;
               room.playerSelections = {};
               room.playerPasses = [];
-              clearInterval(room.phaseInterval);
+              clearInterval(roomManager.phaseIntervals.get(room.id));
+              roomManager.phaseIntervals.delete(room.id);
               startPhaseTimer(room, io);
               io.to(room.id).emit('turnChanged', { currentTeam: room.currentTeam, phase: room.phase, hint: room.hint, phaseTimer: room.phaseTimer });
               io.to(room.id).emit('playerSelectionsUpdate', room.playerSelections);
@@ -408,7 +406,8 @@ function setupGameHandlers(io) {
             room.phaseTimer = 60;
             room.playerSelections = {};
             room.playerPasses = [];
-            clearInterval(room.phaseInterval);
+            clearInterval(roomManager.phaseIntervals.get(room.id));
+            roomManager.phaseIntervals.delete(room.id);
             startPhaseTimer(room, io);
             io.to(room.id).emit('gameMessage', { system: true, text: `Команда ${playerTeam === 'red' ? 'Красная' : 'Синяя'} передала ход. Теперь ход у команды ${room.currentTeam === 'red' ? 'Красной' : 'Синей'}.` });
             io.to(room.id).emit('turnChanged', { currentTeam: room.currentTeam, phase: room.phase, hint: room.hint, phaseTimer: room.phaseTimer });
@@ -656,12 +655,19 @@ function setupGameHandlers(io) {
 
 // Helper functions
 function startPhaseTimer(room, io) {
-  if (room.phaseInterval) clearInterval(room.phaseInterval);
-  room.phaseInterval = setInterval(async () => {
+  // Clear any existing timer for this room
+  const existingInterval = roomManager.phaseIntervals.get(room.id);
+  if (existingInterval) {
+    clearInterval(existingInterval);
+    roomManager.phaseIntervals.delete(room.id);
+  }
+
+  const intervalId = setInterval(async () => {
     room.phaseTimer--;
     io.to(room.id).emit('phaseTimerUpdate', room.phaseTimer);
     if (room.phaseTimer <= 0) {
-      clearInterval(room.phaseInterval);
+      clearInterval(intervalId);
+      roomManager.phaseIntervals.delete(room.id);
       if (room.phase === 'hint') {
         // Time out for hint, proceed to guessing without hint
         room.phase = 'guessing';
@@ -683,6 +689,8 @@ function startPhaseTimer(room, io) {
       await roomManager.updateRoom(room.id, room);
     }
   }, 1000);
+
+  roomManager.phaseIntervals.set(room.id, intervalId);
 }
 
 async function scheduleRoomReset(room, io, message) {
