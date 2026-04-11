@@ -775,6 +775,7 @@ window.addEventListener('load', () => {
   sendChat.addEventListener('click', () => {
     const text = chatInput.value.trim();
     if (!text || !socket) return;
+    console.log('Sending lobby message with nickname:', currentNickname);
     socket.emit('sendMessage', { text, nickname: currentNickname });
     chatInput.value = '';
   });
@@ -788,6 +789,7 @@ window.addEventListener('load', () => {
   tableSendChat.addEventListener('click', () => {
     const text = tableChatInput.value.trim();
     if (!text || !socket) return;
+    console.log('Sending table message with nickname:', currentNickname);
     socket.emit('sendMessage', { text, nickname: currentNickname });
     tableChatInput.value = '';
   });

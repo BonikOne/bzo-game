@@ -626,6 +626,7 @@ function setupGameHandlers(io) {
     });
 
     socket.on('sendMessage', async ({ text, nickname }) => {
+      console.log('Received sendMessage:', { text, nickname });
       try {
         const roomId = socket.data.roomId;
         const room = await roomManager.getRoom(roomId);
@@ -634,6 +635,7 @@ function setupGameHandlers(io) {
         if (!text || typeof text !== 'string' || text.trim().length === 0) return;
 
         const message = { user: nickname || socket.data.nickname, text: text.trim() };
+        console.log('Message user:', message.user);
         if (room.state === 'playing') {
           io.to(room.id).emit('gameMessage', message);
         } else {
