@@ -4,7 +4,8 @@ import time
 time.sleep(5)  # 5 секунд чтобы ты успел переключиться в консоль
 
 text = """
-sudo find / -type f -size +100M -exec ls -lh {} \; | sort -k5 -h
+sudo ufw allow 80
+
 """
 
 for line in text.split("\n"):
