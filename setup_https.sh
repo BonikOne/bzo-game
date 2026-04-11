@@ -20,7 +20,7 @@ docker-compose down
 
 # 3. Get certificate
 echo "Getting Let's Encrypt certificate..."
-sudo certbot certonly --standalone -d friend-games.ru -d www.friend-games.ru --agree-tos --email your@email.ru --non-interactive
+sudo certbot certonly --standalone -d friend-games.ru -d www.friend-games.ru --agree-tos --email onebonik@gmail.com --non-interactive
 
 # 4. Copy certificates to project
 echo "Copying certificates to project..."
