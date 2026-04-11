@@ -661,11 +661,6 @@ backToChoose.addEventListener('click', () => {
   showScreen(chooseScreen);
 });
 
-findRoomButton.addEventListener('click', () => {
-  if (!socket) connectSocket();
-  socket.emit('createOrJoin', { nickname: currentNickname, gameType: currentGame });
-});
-
 refreshRooms.addEventListener('click', () => {
   if (!socket) connectSocket();
   socket.emit('requestRooms');
@@ -748,8 +743,18 @@ window.addEventListener('load', () => {
   });
 
   findRoomButton.addEventListener('click', () => {
+    console.log('findRoomButton clicked');
     if (!socket) connectSocket();
-    socket.emit('createOrJoin', { nickname: currentNickname, gameType: currentGame });
+    if (socket && socket.connected) {
+      console.log('emitting createOrJoin');
+      socket.emit('createOrJoin', { nickname: currentNickname, gameType: currentGame });
+    } else {
+      console.log('waiting for connect');
+      socket.once('connect', () => {
+        console.log('connected, emitting createOrJoin');
+        socket.emit('createOrJoin', { nickname: currentNickname, gameType: currentGame });
+      });
+    }
   });
 
   refreshRooms.addEventListener('click', () => {
@@ -788,4 +793,11 @@ window.addEventListener('load', () => {
     votePrompt.style.display = 'none';
   });
 
+});
+
+// Handle page unload to ensure disconnect
+window.addEventListener('beforeunload', () => {
+  if (socket) {
+    socket.disconnect();
+  }
 });

@@ -43,6 +43,7 @@ function setupGameHandlers(io) {
 
         if (!nickname || !gameType) return;
 
+        console.log(`Creating room for ${nickname}, gameType: ${gameType}`);
         socket.data.nickname = nickname;
         socket.data.gameType = gameType;
 
@@ -605,6 +606,7 @@ function setupGameHandlers(io) {
     socket.on('disconnect', async () => {
       try {
         const roomId = socket.data.roomId;
+        console.log(`Player ${socket.id} disconnected from room ${roomId}`);
         if (!roomId) return;
 
         const room = await roomManager.getRoom(roomId);
@@ -616,6 +618,7 @@ function setupGameHandlers(io) {
         }
 
         if (room.players.length === 0) {
+          console.log(`Deleting empty room ${roomId}`);
           await roomManager.deleteRoom(roomId);
         } else {
           if (room.state === 'playing' && !room.players.find((player) => player.id === room.spyId)) {

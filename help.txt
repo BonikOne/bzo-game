@@ -24,3 +24,6 @@ docker-compose logs -f app
 docker-compose down
 git pull origin main
 docker-compose up --build -d
+
+
+git add public/index.html public/script.js public/style.css nginx.conf ; git commit -m "Prepare UI redesign for remaining screens" ; git push

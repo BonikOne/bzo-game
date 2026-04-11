@@ -65,7 +65,7 @@ class RoomManager {
     try {
       if (this.useRedis) {
         await this.redis.set(`room:${roomId}`, JSON.stringify(this.serializeRoom(room)));
-        await this.redis.expire(`room:${roomId}`, 24 * 60 * 60); // 24 hours TTL
+        await this.redis.expire(`room:${roomId}`, 60 * 60); // 1 hour TTL
       } else {
         this.inMemoryRooms.set(roomId, room);
       }
@@ -122,6 +122,7 @@ class RoomManager {
   // Delete room from Redis or in-memory
   async deleteRoom(roomId) {
     try {
+      console.log(`Deleting room ${roomId}`);
       // Clear any active timer
       const intervalId = this.phaseIntervals.get(roomId);
       if (intervalId) {
@@ -134,6 +135,7 @@ class RoomManager {
       } else {
         this.inMemoryRooms.delete(roomId);
       }
+      console.log(`Room ${roomId} deleted successfully`);
       return true;
     } catch (error) {
       console.error('Error deleting room:', error);
