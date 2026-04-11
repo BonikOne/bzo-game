@@ -23,6 +23,7 @@ docker-compose logs -f app
 Если на сервере уже есть старая версия, сначала остановить:
 docker-compose down
 git pull origin main
+export COMPOSE_HTTP_TIMEOUT=300
 docker-compose up --build -d
 
 

@@ -328,7 +328,7 @@ body::before {
   cursor: pointer;
   border: none;
   border-radius: 12px;
-  padding: 16px 24px;
+  padding: 14px 24px;
   font-size: 1rem;
   font-weight: 700;
   transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
@@ -377,20 +377,99 @@ body::before {
   box-shadow: 0 20px 60px rgba(251, 191, 36, 0.3);
 }
 
+.primary {
+  cursor: pointer;
+  border: none;
+  border-radius: 12px;
+  padding: 18px 32px;
+  font-size: 1.1rem;
+  font-weight: 700;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  position: relative;
+  overflow: hidden;
+  background: var(--primary-gradient);
+  color: #000;
+  box-shadow: 0 12px 40px rgba(251, 191, 36, 0.2);
+  flex: 1;
+  min-width: 0;
+}
+
+.primary::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transform: translateX(-100%);
+  transition: transform 0.6s;
+  pointer-events: none;
+}
+
+.primary:hover:not(:disabled)::before {
+  transform: translateX(100%);
+}
+
+.primary:hover:not(:disabled) {
+  transform: translateY(-3px);
+  box-shadow: 0 20px 60px rgba(251, 191, 36, 0.3);
+}
+
+.primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .btn-icon {
   display: inline-block;
 }
 
 .btn-secondary {
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--text);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  width: 100%;
+  cursor: pointer;
+  border: none;
+  border-radius: 12px;
+  padding: 18px 32px;
+  font-size: 1.1rem;
+  font-weight: 700;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(135deg, #8b5cf6 0%, #3b82f6 100%);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  width: auto;
+  min-width: 140px;
+  box-shadow: 0 10px 30px rgba(139, 92, 246, 0.2);
+  flex: 1;
+  min-width: 0;
+}
+
+.btn-secondary::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transform: translateX(-100%);
+  transition: transform 0.6s;
+  pointer-events: none;
+}
+
+.btn-secondary:hover:not(:disabled)::before {
+  transform: translateX(100%);
 }
 
 .btn-secondary:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.3);
+  transform: translateY(-3px);
+  background: linear-gradient(135deg, #7c3aed 20%, #2563eb 80%);
+  border-color: rgba(255, 255, 255, 0.5);
+  box-shadow: 0 15px 40px rgba(139, 92, 246, 0.3);
+}
+
+.btn-secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .benefits {
@@ -708,8 +787,12 @@ body::before {
   background: linear-gradient(135deg, rgba(15, 20, 30, 0.95), rgba(20, 26, 40, 0.85));
   border: 2px solid rgba(251, 191, 36, 0.3);
   border-radius: 32px;
-  padding: 40px;
-  margin-bottom: 24px;
+  padding: 8px;
+  margin-top: 80px;
+  margin-bottom: 16px;
+  max-width: 95vw;
+  margin-left: auto;
+  margin-right: auto;
   box-shadow: 0 38px 110px rgba(0, 0, 0, 0.4), 0 0 40px rgba(251, 191, 36, 0.1);
   backdrop-filter: blur(25px);
   transition: transform 0.3s ease, opacity 0.3s ease;
@@ -739,7 +822,7 @@ body::before {
   border: 1px solid rgba(255, 255, 255, 0.16);
   box-shadow: 0 45px 130px rgba(0, 0, 0, 0.4);
   border-radius: 36px;
-  padding: 36px;
+  padding: 16px;
 }
 
 #choose-screen::before,
@@ -757,7 +840,7 @@ body::before {
 #choose-screen h2,
 #lobby-screen h2 {
   margin-top: 0;
-  font-size: clamp(2rem, 2.4vw, 2.4rem);
+  font-size: clamp(1.5rem, 1.8vw, 2rem);
   letter-spacing: -0.04em;
   color: transparent;
   background: linear-gradient(135deg, #fbbf24 0%, #a78bfa 100%);
@@ -835,8 +918,8 @@ input[type='password'] {
   width: 100%;
   max-width: 100%;
   margin: 8px 0;
-  font-size: 1.05rem;
-  padding: 18px 22px;
+  font-size: 0.95rem;
+  padding: 14px 18px;
   border-radius: 18px;
   background: linear-gradient(135deg, rgba(251, 191, 36, 0.97), rgba(249, 115, 22, 0.92));
   color: #000;
@@ -884,18 +967,18 @@ input[type='password'] {
 .info-card {
   background: linear-gradient(135deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.04));
   border: 1px solid rgba(255, 255, 255, 0.15);
-  box-shadow: 0 18px 45px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
   backdrop-filter: blur(10px);
 }
 
 .game-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 30px;
+  gap: 20px;
 }
 
 .game-card {
-  min-height: 360px;
+  min-height: 300px;
   border-radius: 32px;
   overflow: hidden;
   position: relative;
@@ -907,7 +990,7 @@ input[type='password'] {
 
 .game-card img {
   width: 100%;
-  height: 220px;
+  height: 180px;
   object-fit: cover;
   display: block;
   filter: contrast(1.05) saturate(1.12);
@@ -953,16 +1036,16 @@ body.table-view .app-shell {
 
 .game-card-info {
   position: absolute;
-  left: 24px;
-  right: 24px;
-  bottom: 24px;
+  left: 16px;
+  right: 16px;
+  bottom: 16px;
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
   gap: 16px;
   z-index: 1;
   background: linear-gradient(180deg, rgba(10, 14, 24, 0), rgba(10, 14, 24, 0.94));
-  padding: 22px;
+  padding: 16px;
   border-radius: 24px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   backdrop-filter: blur(12px);
@@ -970,7 +1053,7 @@ body.table-view .app-shell {
 
 .game-card-info h3 {
   margin: 0 0 8px;
-  font-size: 1.6rem;
+  font-size: 1.4rem;
   line-height: 1.1;
   color: #fff;
 }
@@ -983,10 +1066,10 @@ body.table-view .app-shell {
 }
 
 .play-now {
-  min-width: 140px;
+  min-width: 120px;
   white-space: nowrap;
   border-radius: 999px;
-  padding: 16px 26px;
+  padding: 12px 20px;
   background: var(--secondary-gradient);
   color: #fff;
   border: 1px solid rgba(255, 255, 255, 0.18);
@@ -1015,18 +1098,18 @@ body.table-view .app-shell {
 /* Lobby styles */
 .lobby-columns {
   display: grid;
-  grid-template-columns: 1fr 1.5fr;
-  gap: 30px;
+  grid-template-columns: 1fr 1.1fr;
+  gap: 10px;
 }
 
 .lobby-panel {
   display: flex;
   flex-direction: column;
-  gap: 22px;
+  gap: 12px;
   background: linear-gradient(135deg, rgba(14, 20, 36, 0.94), rgba(18, 26, 45, 0.95));
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 36px;
-  padding: 32px;
+  padding: 8px;
   box-shadow: 0 40px 120px rgba(0, 0, 0, 0.36);
   position: relative;
 }
@@ -1048,8 +1131,13 @@ body.table-view .app-shell {
   flex-wrap: wrap;
 }
 
+.lobby-row .btn {
+  flex: 1;
+  min-width: 0;
+}
+
 .room-list {
-  min-height: 320px;
+  min-height: 200px;
   overflow: auto;
   border: 1px solid rgba(255, 255, 255, 0.11);
   border-radius: 28px;
@@ -1134,7 +1222,7 @@ body.table-view .app-shell {
   background: linear-gradient(135deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02));
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 28px;
-  padding: 24px;
+  padding: 12px;
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.18);
 }
 
@@ -1406,6 +1494,8 @@ body.table-view .app-shell {
   backdrop-filter: blur(5px);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
 }
+
+.location-card:hover {
   box-shadow: 0 12px 24px rgba(0, 0, 0, 0.18);
   cursor: pointer;
   transition: transform 0.22s ease, box-shadow 0.22s ease;
@@ -1793,12 +1883,8 @@ body.table-view .app-shell {
 }
 
 @media (max-width: 1200px) {
-  .table-content {
-    grid-template-columns: 150px 1fr 200px;
-  }
-
-  .cards-grid {
-    grid-template-columns: repeat(4, 1fr);
+  .lobby-columns {
+    grid-template-columns: 1fr;
   }
 }
 
