@@ -34,6 +34,8 @@ const statsContent = document.getElementById('statsContent');
 const messageBox = document.getElementById('messageBox');
 const playButton = document.getElementById('playButton');
 const statsButton = document.getElementById('statsButton');
+const logoutButton = document.getElementById('logoutButton');
+const currentUserLabel = document.getElementById('currentUserLabel');
 const spyCard = document.getElementById('spy-card');
 const codenamesCard = document.getElementById('codenames-card');
 const backToMenu = document.getElementById('backToMenu');
@@ -168,6 +170,7 @@ function loadNickname() {
   const saved = localStorage.getItem(STORAGE_NICK);
   if (saved) {
     currentNickname = saved;
+    updateUserLabel();
     if (nicknameInput) {
       nicknameInput.value = saved;
     }
@@ -176,8 +179,30 @@ function loadNickname() {
   return false;
 }
 
+function updateUserLabel() {
+  if (currentUserLabel) {
+    currentUserLabel.textContent = currentNickname || 'Игрок';
+  }
+}
+
+function logout() {
+  if (socket) {
+    socket.disconnect();
+    socket = null;
+  }
+  localStorage.removeItem(STORAGE_NICK);
+  currentNickname = null;
+  updateUserLabel();
+  if (nicknameInput) {
+    nicknameInput.value = '';
+  }
+  showScreen(landingScreen);
+  showMessage('Вы вышли. Введите новый ник, чтобы начать.');
+}
+
 function saveNickname(name) {
   currentNickname = name;
+  updateUserLabel();
   localStorage.setItem(STORAGE_NICK, name);
 }
 
@@ -701,6 +726,7 @@ window.addEventListener('load', () => {
   });
 
   statsButton.addEventListener('click', openStatsModal);
+  logoutButton?.addEventListener('click', logout);
   closeStats.addEventListener('click', closeStatsModal);
 
   spyCard.querySelector('button').addEventListener('click', () => {
