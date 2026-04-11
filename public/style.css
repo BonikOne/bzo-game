@@ -1136,6 +1136,32 @@ body.table-view .app-shell {
   min-width: 0;
 }
 
+.join-by-code {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.join-by-code .input-field {
+  flex: 1;
+}
+
+.room-code-display {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  margin-bottom: 12px;
+}
+
+.btn.small {
+  padding: 8px 16px;
+  font-size: 0.9rem;
+}
+
 .room-list {
   min-height: 200px;
   overflow: auto;
@@ -1329,6 +1355,7 @@ body.table-view .app-shell {
   padding: 0 !important;
   width: 100vw;
   max-width: none;
+  margin-top: 0 !important;
   margin-left: calc(50% - 50vw);
   margin-right: calc(50% - 50vw);
   margin-bottom: 0;

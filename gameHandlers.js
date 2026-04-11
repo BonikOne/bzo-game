@@ -128,6 +128,59 @@ function setupGameHandlers(io) {
       }
     });
 
+    // Join room by code handler
+    socket.on('joinRoomByCode', async ({ code }) => {
+      try {
+        const room = await roomManager.getRoom(code);
+        if (!room) {
+          socket.emit('error', 'Комната с таким кодом не найдена');
+          return;
+        }
+        if (room.state !== 'waiting' || room.players.length >= room.capacity) {
+          socket.emit('error', 'Невозможно присоединиться к этой комнате');
+          return;
+        }
+
+        // Check if player is already in the room
+        const existingPlayer = room.players.find(p => p.id === socket.id);
+        if (existingPlayer) {
+          socket.data.roomId = code;
+          socket.data.nickname = existingPlayer.nickname;
+          socket.join(code);
+          socket.emit('roomJoined', {
+            roomId: room.id,
+            title: room.title,
+            creatorId: room.creatorId,
+            gameType: room.gameType
+          });
+          const updatedRoom = await roomManager.getRoom(code);
+          io.to(code).emit('roomUpdate', updatedRoom);
+          return;
+        }
+
+        // If not in room, need nickname - but since it's by code, assume user is logged in
+        const nickname = socket.data.nickname || 'Player';
+        await roomManager.joinRoom(code, nickname, socket.id);
+        socket.data.roomId = code;
+        socket.data.nickname = nickname;
+        socket.join(code);
+
+        socket.emit('roomJoined', {
+          roomId: room.id,
+          title: room.title,
+          creatorId: room.creatorId,
+          gameType: room.gameType
+        });
+
+        const updatedRoom = await roomManager.getRoom(code);
+        io.to(code).emit('roomUpdate', updatedRoom);
+
+      } catch (error) {
+        console.error('Error in joinRoomByCode:', error);
+        socket.emit('error', 'Не удалось присоединиться к комнате');
+      }
+    });
+
     // Start game handler
     socket.on('startGame', async () => {
       try {

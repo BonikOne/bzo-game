@@ -218,20 +218,37 @@
       <button id="backToMenu" class="btn secondary">Назад</button>
     </section>
 
+    <section id="room-list-screen" class="card screen">
+      <h2>Выбор комнаты</h2>
+      <div class="lobby-panel">
+        <div class="lobby-row">
+          <button id="findRoomButton" class="btn primary">Создать / Присоединиться</button>
+          <button id="refreshRooms" class="btn secondary">Обновить</button>
+        </div>
+        <div class="join-by-code">
+          <input id="joinCodeInput" type="text" placeholder="Введите код комнаты" class="input-field" />
+          <button id="joinByCodeButton" class="btn secondary">Присоединиться по коду</button>
+        </div>
+        <div class="room-list" id="roomList"></div>
+      </div>
+      <button id="backToChooseFromRooms" class="btn secondary">Назад</button>
+    </section>
+
     <section id="lobby-screen" class="card screen">
-      <h2>Игровая комната</h2>
+      <h2>Лобби комнаты</h2>
       <div class="lobby-columns">
         <div class="lobby-panel">
-          <div class="lobby-row">
-            <button id="findRoomButton" class="btn primary">Создать / Присоединиться</button>
-            <button id="refreshRooms" class="btn secondary">Обновить</button>
+          <div class="room-info" id="roomInfo">
+            <div class="room-code-display">
+              <span>Код комнаты: <strong id="roomCodeText"></strong></span>
+              <button id="copyRoomCode" class="btn secondary small">Копировать</button>
+            </div>
+            <div id="roomDetails"></div>
           </div>
-          <div class="room-list" id="roomList"></div>
-        </div>
-        <div class="lobby-panel">
-          <div class="room-info" id="roomInfo"></div>
           <div class="players-list" id="playersList"></div>
           <div class="room-actions" id="roomActions"></div>
+        </div>
+        <div class="lobby-panel">
           <div class="chat-panel">
             <div class="chat-header">Чат комнаты</div>
             <div class="chat-messages" id="chatMessages"></div>
@@ -242,7 +259,7 @@
           </div>
         </div>
       </div>
-      <button id="backToChoose" class="btn secondary">Назад</button>
+      <button id="backToRooms" class="btn secondary">Назад к списку</button>
     </section>
 
     <section id="table-screen" class="screen">

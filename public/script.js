@@ -27,6 +27,7 @@ window.scrollToAuth = scrollToAuth;
 const landingScreen = document.getElementById('landing-screen');
 const mainMenu = document.getElementById('main-menu');
 const chooseScreen = document.getElementById('choose-screen');
+const roomListScreen = document.getElementById('room-list-screen');
 const lobbyScreen = document.getElementById('lobby-screen');
 const tableScreen = document.getElementById('table-screen');
 const statsModal = document.getElementById('statsModal');
@@ -39,11 +40,17 @@ const currentUserLabel = document.getElementById('currentUserLabel');
 const spyCard = document.getElementById('spy-card');
 const codenamesCard = document.getElementById('codenames-card');
 const backToMenu = document.getElementById('backToMenu');
-const backToChoose = document.getElementById('backToChoose');
+const backToChooseFromRooms = document.getElementById('backToChooseFromRooms');
+const backToRooms = document.getElementById('backToRooms');
 const findRoomButton = document.getElementById('findRoomButton');
 const refreshRooms = document.getElementById('refreshRooms');
+const joinCodeInput = document.getElementById('joinCodeInput');
+const joinByCodeButton = document.getElementById('joinByCodeButton');
 const roomList = document.getElementById('roomList');
 const roomInfo = document.getElementById('roomInfo');
+const roomDetails = document.getElementById('roomDetails');
+const roomCodeText = document.getElementById('roomCodeText');
+const copyRoomCode = document.getElementById('copyRoomCode');
 const playersList = document.getElementById('playersList');
 const roomActions = document.getElementById('roomActions');
 const chatMessages = document.getElementById('chatMessages');
@@ -144,7 +151,7 @@ let currentLocation = null;
 let hasInitiatedVote = false;
 
 function showScreen(screen) {
-  [landingScreen, mainMenu, chooseScreen, lobbyScreen, tableScreen].forEach((section) => {
+  document.querySelectorAll('.screen').forEach((section) => {
     section.classList.toggle('active', section === screen);
   });
   document.body.classList.toggle('table-view', screen === tableScreen);
@@ -164,7 +171,7 @@ function selectGame(gameType) {
   codenamesCard.classList.toggle('active', gameType === 'codenames');
   document.body.classList.toggle('spy-theme', gameType === 'spy');
   document.body.classList.toggle('codenames-theme', gameType === 'codenames');
-  showScreen(lobbyScreen);
+  showScreen(roomListScreen);
   connectSocket();
 }
 
@@ -404,12 +411,17 @@ function renderRoomList(rooms) {
 }
 
 function renderRoomInfo(room) {
-  roomInfo.innerHTML = room
-    ? `<p>Комната: <strong>${room.title}</strong></p>
+  if (room) {
+    roomCodeText.textContent = room.id;
+    roomDetails.innerHTML = `
+       <p>Комната: <strong>${room.title}</strong></p>
        <p>Игра: <strong>${room.gameType === 'codenames' ? 'Код Неймс' : 'Шпион'}</strong></p>
        <p>Состояние: <strong>${room.state === 'waiting' ? 'Ожидание игроков' : 'Игра в процессе'}</strong></p>
-       <p>Игроков: <strong>${(room.players?.length || 0)}/${room.capacity || 6}</strong></p>`
-    : '<p>Выберите комнату или создайте новую.</p>';
+       <p>Игроков: <strong>${(room.players?.length || 0)}/${room.capacity || 6}</strong></p>`;
+  } else {
+    roomCodeText.textContent = '';
+    roomDetails.innerHTML = '<p>Выберите комнату или создайте новую.</p>';
+  }
 }
 
 function renderPlayers(players = [], creatorId, state) {
@@ -643,70 +655,6 @@ function joinRoom(roomId) {
   socket.emit('joinRoom', { nickname: currentNickname, roomId });
 }
 
-// Event listeners are now set up in window.addEventListener('load')
-
-spyCard.querySelector('button').addEventListener('click', () => {
-  selectGame('spy');
-});
-
-codenamesCard.querySelector('button').addEventListener('click', () => {
-  selectGame('codenames');
-});
-
-backToMenu.addEventListener('click', () => {
-  showScreen(mainMenu);
-});
-
-backToChoose.addEventListener('click', () => {
-  showScreen(chooseScreen);
-});
-
-refreshRooms.addEventListener('click', () => {
-  if (!socket) connectSocket();
-  socket.emit('requestRooms');
-});
-
-sendChat.addEventListener('click', () => {
-  const text = chatInput.value.trim();
-  if (!text || !socket) return;
-  socket.emit('sendMessage', { text });
-  chatInput.value = '';
-});
-
-chatInput.addEventListener('keypress', (event) => {
-  if (event.key === 'Enter') {
-    sendChat.click();
-  }
-});
-
-tableSendChat.addEventListener('click', () => {
-  const text = tableChatInput.value.trim();
-  if (!text || !socket) return;
-  socket.emit('sendMessage', { text });
-  tableChatInput.value = '';
-});
-
-tableChatInput.addEventListener('keypress', (event) => {
-  if (event.key === 'Enter') {
-    tableSendChat.click();
-  }
-});
-
-voteYes.addEventListener('click', () => {
-  socket.emit('castVote', { vote: 'yes' });
-  votePrompt.style.display = 'none';
-});
-
-voteNo.addEventListener('click', () => {
-  socket.emit('castVote', { vote: 'no' });
-  votePrompt.style.display = 'none';
-});
-
-statsModal.addEventListener('click', (event) => {
-  if (event.target === statsModal) {
-    closeStatsModal();
-  }
-});
 
 window.addEventListener('load', () => {
   if (loadNickname()) {
@@ -725,6 +673,11 @@ window.addEventListener('load', () => {
   statsButton.addEventListener('click', openStatsModal);
   logoutButton?.addEventListener('click', logout);
   closeStats.addEventListener('click', closeStatsModal);
+  statsModal.addEventListener('click', (event) => {
+    if (event.target === statsModal) {
+      closeStatsModal();
+    }
+  });
 
   spyCard.querySelector('button').addEventListener('click', () => {
     selectGame('spy');
@@ -738,28 +691,81 @@ window.addEventListener('load', () => {
     showScreen(mainMenu);
   });
 
-  backToChoose.addEventListener('click', () => {
+  backToChooseFromRooms.addEventListener('click', () => {
     showScreen(chooseScreen);
+  });
+
+  backToRooms.addEventListener('click', () => {
+    showScreen(roomListScreen);
   });
 
   findRoomButton.addEventListener('click', () => {
     console.log('findRoomButton clicked');
+    if (!currentNickname) {
+      showMessage('Сначала введите никнейм.');
+      return;
+    }
     if (!socket) connectSocket();
+    const nickname = currentNickname || 'Игрок';
     if (socket && socket.connected) {
       console.log('emitting createOrJoin');
-      socket.emit('createOrJoin', { nickname: currentNickname, gameType: currentGame });
+      socket.emit('createOrJoin', { nickname, gameType: currentGame });
     } else {
       console.log('waiting for connect');
       socket.once('connect', () => {
         console.log('connected, emitting createOrJoin');
-        socket.emit('createOrJoin', { nickname: currentNickname, gameType: currentGame });
+        socket.emit('createOrJoin', { nickname, gameType: currentGame });
       });
     }
   });
 
   refreshRooms.addEventListener('click', () => {
     if (!socket) connectSocket();
-    socket.emit('requestRooms');
+    if (socket && socket.connected) {
+      socket.emit('requestRooms');
+    }
+  });
+
+  joinByCodeButton.addEventListener('click', () => {
+    const code = joinCodeInput.value.trim();
+    if (!code) {
+      showMessage('Введите код комнаты.');
+      return;
+    }
+    if (!socket) connectSocket();
+    if (socket && socket.connected) {
+      socket.emit('joinRoomByCode', { code });
+    } else {
+      socket.once('connect', () => {
+        socket.emit('joinRoomByCode', { code });
+      });
+    }
+    joinCodeInput.value = '';
+  });
+
+  joinCodeInput.addEventListener('keypress', (event) => {
+    if (event.key === 'Enter') {
+      joinByCodeButton.click();
+    }
+  });
+
+  copyRoomCode.addEventListener('click', () => {
+    const code = roomCodeText.textContent;
+    if (!code) {
+      showMessage('Код комнаты не доступен.');
+      return;
+    }
+    navigator.clipboard.writeText(code).then(() => {
+      showMessage('Код скопирован в буфер обмена!');
+    }).catch(() => {
+      const fallback = document.createElement('textarea');
+      fallback.value = code;
+      document.body.appendChild(fallback);
+      fallback.select();
+      document.execCommand('copy');
+      fallback.remove();
+      showMessage('Код скопирован в буфер обмена!');
+    });
   });
 
   sendChat.addEventListener('click', () => {
