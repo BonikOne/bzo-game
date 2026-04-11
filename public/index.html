@@ -3,24 +3,153 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Битва за очко | Game Hub</title>
-  <link rel="stylesheet" href="style.css" />
+  <title>Friend Games | Играй онлайн с друзьями</title>
+  <link rel="stylesheet" href="style.css?v=5" />
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <script src="script.js?v=5" defer></script>
 </head>
 <body>
   <div class="app-shell">
-    <div class="brand-card">
-      <h1>Битва за очко</h1>
-      <p>Game Hub — подборка онлайн-игр с одной центральной площадкой и яркими карточками.</p>
-    </div>
+    <div id="landing-screen" class="screen active">
+      <!-- Hero Section -->
+      <div class="hero-section">
+        <div class="hero-gradient"></div>
+        <div class="hero-content">
+          <h1 class="hero-title">Friend Games</h1>
+          <p class="hero-tagline">Играй с друзьями онлайн. Никакой регистрации не требуется</p>
+          <div class="hero-buttons">
+            <button class="btn-scroll-auth" onclick="scrollToAuth()">Войти сейчас →</button>
+          </div>
+        </div>
+      </div>
 
-    <section id="login-screen" class="card screen active">
-      <h2>Вход</h2>
-      <label>Твой никнейм</label>
-      <input id="nickname" type="text" placeholder="Введите ник" maxlength="16" />
-      <button id="loginButton" class="primary" onclick="login()">Войти</button>
-      <p class="hint">Ник сохраняется в localStorage и будет автоматически подставляться при повторном входе.</p>
-    </section>
+      <!-- Auth Section -->
+      <div class="auth-section">
+        <div class="auth-grid">
+          <!-- Quick Play Card (Primary) -->
+          <div class="auth-card quick-play-card primary-card">
+            <div class="card-decoration"></div>
+            <div class="card-content">
+              <div class="card-icon-large">🎮</div>
+              <h2 class="card-title">Быстрая игра</h2>
+              <p class="card-description">Введите ник и начните играть немедленно</p>
+              
+              <div class="form-group">
+                <input 
+                  id="nickname-guest" 
+                  type="text" 
+                  placeholder="Ваш ник (до 16 символов)" 
+                  maxlength="16"
+                  class="input-field"
+                />
+              </div>
+              
+              <button id="loginButton" class="btn btn-play" onclick="login()">
+                <span class="btn-icon">▶</span>
+                Начать игру
+              </button>
+
+              <div class="benefits">
+                <div class="benefit-item">
+                  <span class="benefit-icon">✓</span>
+                  <span class="benefit-text">Без регистрации</span>
+                </div>
+                <div class="benefit-item">
+                  <span class="benefit-icon">✓</span>
+                  <span class="benefit-text">Полная анонимность</span>
+                </div>
+                <div class="benefit-item">
+                  <span class="benefit-icon">✓</span>
+                  <span class="benefit-text">Играй сразу</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Account Card (Secondary) -->
+          <div class="auth-card account-card secondary-card">
+            <div class="card-decoration"></div>
+            <div class="card-content">
+              <div class="card-icon-large badge-feature">⭐</div>
+              <h2 class="card-title">Создать аккаунт</h2>
+              <p class="card-description">Сохраняй результаты и отслеживай прогресс</p>
+              
+              <div class="form-group">
+                <input 
+                  type="email" 
+                  placeholder="your@email.com" 
+                  disabled
+                  class="input-field"
+                />
+              </div>
+              <div class="form-group">
+                <input 
+                  type="password" 
+                  placeholder="••••••••" 
+                  disabled
+                  class="input-field"
+                />
+              </div>
+              
+              <button id="registerButton" class="btn btn-secondary" disabled>
+                Скоро появится
+              </button>
+
+              <div class="benefits premium">
+                <div class="benefit-item">
+                  <span class="benefit-icon">📊</span>
+                  <span class="benefit-text">Личная статистика</span>
+                </div>
+                <div class="benefit-item">
+                  <span class="benefit-icon">🏆</span>
+                  <span class="benefit-text">Рейтинг игроков</span>
+                </div>
+                <div class="benefit-item">
+                  <span class="benefit-icon">🔒</span>
+                  <span class="benefit-text">Защита данных</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Features Section -->
+      <div class="features-section">
+        <h2 class="section-title">Игры которые тебе понравятся</h2>
+        <div class="features-grid">
+          <div class="feature-card">
+            <div class="feature-emoji">🕵️</div>
+            <h3>Шпион</h3>
+            <p>Угадай шпиона. Задавай вопросы, ищи подсказки, голосуй. Все ли предатели пойманы?</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-emoji">🔤</div>
+            <h3>Код Неймс</h3>
+            <p>Отгадай слова по подсказкам капитана. Командная работа и стратегия — залог успеха.</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-emoji">⚡</div>
+            <h3>Быстро и просто</h3>
+            <p>Партия длится 10-30 минут. Можно играть на перерыве, в обеде или в любое время.</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-emoji">👥</div>
+            <h3>Играй с друзьями</h3>
+            <p>Приглашайте друзей по ссылке. Играйте вместе онлайн в реальном времени.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Info Footer -->
+      <div class="info-footer">
+        <div class="footer-content">
+          <p>✨ Начни прямо сейчас — никакой регистрации не нужно. Просто введи ник и играй с друзьями!</p>
+        </div>
+      </div>
+        </div>
+      </div>
+    </div>
 
     <section id="main-menu" class="card screen">
       <h2>Главное меню</h2>
@@ -166,7 +295,5 @@
 
     <div class="message-box" id="messageBox"></div>
   </div>
-
-  <script src="script.js"></script>
 </body>
 </html>

@@ -1,16 +1,30 @@
 // Global functions for onclick handlers
+let nicknameInput; // Global variable for nickname input
+
 function login() {
+  if (!nicknameInput) {
+    showMessage('Ошибка: поле ввода не найдено.');
+    return;
+  }
   const name = nicknameInput.value.trim();
   if (!name) {
     showMessage('Введите никнейм.');
     return;
   }
   saveNickname(name);
-  showScreen(mainMenu);
+  showScreen(chooseScreen);
+}
+
+function scrollToAuth() {
+  const authSection = document.querySelector('.auth-section');
+  if (authSection) {
+    authSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
 }
 
 window.login = login;
-const loginScreen = document.getElementById('login-screen');
+window.scrollToAuth = scrollToAuth;
+const landingScreen = document.getElementById('landing-screen');
 const mainMenu = document.getElementById('main-menu');
 const chooseScreen = document.getElementById('choose-screen');
 const lobbyScreen = document.getElementById('lobby-screen');
@@ -18,9 +32,6 @@ const tableScreen = document.getElementById('table-screen');
 const statsModal = document.getElementById('statsModal');
 const statsContent = document.getElementById('statsContent');
 const messageBox = document.getElementById('messageBox');
-
-const nicknameInput = document.getElementById('nickname');
-const loginButton = document.getElementById('loginButton');
 const playButton = document.getElementById('playButton');
 const statsButton = document.getElementById('statsButton');
 const spyCard = document.getElementById('spy-card');
@@ -37,6 +48,7 @@ const chatMessages = document.getElementById('chatMessages');
 const chatInput = document.getElementById('chatInput');
 const sendChat = document.getElementById('sendChat');
 const closeStats = document.getElementById('closeStats');
+nicknameInput = document.getElementById('nickname-guest');
 
 // Table screen elements
 const tableTitle = document.getElementById('tableTitle');
@@ -130,7 +142,7 @@ let currentLocation = null;
 let hasInitiatedVote = false;
 
 function showScreen(screen) {
-  [loginScreen, mainMenu, chooseScreen, lobbyScreen, tableScreen].forEach((section) => {
+  [landingScreen, mainMenu, chooseScreen, lobbyScreen, tableScreen].forEach((section) => {
     section.classList.toggle('active', section === screen);
   });
   document.body.classList.toggle('table-view', screen === tableScreen);
@@ -156,7 +168,9 @@ function loadNickname() {
   const saved = localStorage.getItem(STORAGE_NICK);
   if (saved) {
     currentNickname = saved;
-    nicknameInput.value = saved;
+    if (nicknameInput) {
+      nicknameInput.value = saved;
+    }
     return true;
   }
   return false;
@@ -677,7 +691,7 @@ window.addEventListener('load', () => {
     showScreen(mainMenu);
     connectSocket();
   } else {
-    showScreen(loginScreen);
+    showScreen(landingScreen);
   }
 
   // Setup event listeners after DOM is loaded

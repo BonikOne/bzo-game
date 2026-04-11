@@ -1,0 +1,26 @@
+На локальной машине (уже выполнено):
+cd c:\python\bzo
+git add .
+git commit -m "Fix timer issues with Redis and room creation logic"
+git push origin main
+
+На сервере:
+# Установить Git, Docker и Docker Compose, если не установлены
+sudo apt update
+sudo apt install -y git docker.io docker-compose
+# Клонировать репозиторий
+git clone https://github.com/BonikOne/bzo-game.git
+cd bzo-game
+# Создать .env файл с переменными окружения (если нужно)
+cp .env.example .env
+# Отредактировать .env с нужными значениями
+# Запустить приложение
+docker-compose up --build -d
+# Проверить статус
+docker-compose ps
+docker-compose logs -f app
+
+Если на сервере уже есть старая версия, сначала остановить:
+docker-compose down
+git pull origin main
+docker-compose up --build -d

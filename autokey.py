@@ -4,7 +4,7 @@ import time
 time.sleep(5)  # 5 секунд чтобы ты успел переключиться в консоль
 
 text = """
-sudo usermod -aG sudo newuser
+du -h --max-depth=1 / 2>/dev/null | sort -hr
 """
 
 for line in text.split("\n"):
