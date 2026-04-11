@@ -129,7 +129,7 @@ function setupGameHandlers(io) {
     });
 
     // Join room by code handler
-    socket.on('joinRoomByCode', async ({ code }) => {
+    socket.on('joinRoomByCode', async ({ code, nickname }) => {
       try {
         const room = await roomManager.getRoom(code);
         if (!room) {
@@ -159,10 +159,10 @@ function setupGameHandlers(io) {
         }
 
         // If not in room, need nickname - but since it's by code, assume user is logged in
-        const nickname = socket.data.nickname || 'Player';
-        await roomManager.joinRoom(code, nickname, socket.id);
+        const finalNickname = nickname || socket.data.nickname || 'Player';
+        await roomManager.joinRoom(code, finalNickname, socket.id);
         socket.data.roomId = code;
-        socket.data.nickname = nickname;
+        socket.data.nickname = finalNickname;
         socket.join(code);
 
         socket.emit('roomJoined', {
@@ -625,7 +625,7 @@ function setupGameHandlers(io) {
       }
     });
 
-    socket.on('sendMessage', async ({ text }) => {
+    socket.on('sendMessage', async ({ text, nickname }) => {
       try {
         const roomId = socket.data.roomId;
         const room = await roomManager.getRoom(roomId);
@@ -633,7 +633,7 @@ function setupGameHandlers(io) {
 
         if (!text || typeof text !== 'string' || text.trim().length === 0) return;
 
-        const message = { user: socket.data.nickname, text: text.trim() };
+        const message = { user: nickname || socket.data.nickname, text: text.trim() };
         if (room.state === 'playing') {
           io.to(room.id).emit('gameMessage', message);
         } else {

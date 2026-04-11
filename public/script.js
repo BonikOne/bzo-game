@@ -177,7 +177,7 @@ function selectGame(gameType) {
 
 function loadNickname() {
   const saved = localStorage.getItem(STORAGE_NICK);
-  if (saved) {
+  if (saved && saved !== 'undefined') {
     currentNickname = saved;
     updateUserLabel();
     if (nicknameInput) {
@@ -732,12 +732,16 @@ window.addEventListener('load', () => {
       showMessage('Введите код комнаты.');
       return;
     }
+    if (!currentNickname) {
+      showMessage('Сначала введите никнейм.');
+      return;
+    }
     if (!socket) connectSocket();
     if (socket && socket.connected) {
-      socket.emit('joinRoomByCode', { code });
+      socket.emit('joinRoomByCode', { code, nickname: currentNickname });
     } else {
       socket.once('connect', () => {
-        socket.emit('joinRoomByCode', { code });
+        socket.emit('joinRoomByCode', { code, nickname: currentNickname });
       });
     }
     joinCodeInput.value = '';
@@ -771,7 +775,7 @@ window.addEventListener('load', () => {
   sendChat.addEventListener('click', () => {
     const text = chatInput.value.trim();
     if (!text || !socket) return;
-    socket.emit('sendMessage', { text });
+    socket.emit('sendMessage', { text, nickname: currentNickname });
     chatInput.value = '';
   });
 
@@ -784,7 +788,7 @@ window.addEventListener('load', () => {
   tableSendChat.addEventListener('click', () => {
     const text = tableChatInput.value.trim();
     if (!text || !socket) return;
-    socket.emit('sendMessage', { text });
+    socket.emit('sendMessage', { text, nickname: currentNickname });
     tableChatInput.value = '';
   });
 
