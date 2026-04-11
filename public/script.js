@@ -162,6 +162,8 @@ function selectGame(gameType) {
   currentGame = gameType;
   spyCard.classList.toggle('active', gameType === 'spy');
   codenamesCard.classList.toggle('active', gameType === 'codenames');
+  document.body.classList.toggle('spy-theme', gameType === 'spy');
+  document.body.classList.toggle('codenames-theme', gameType === 'codenames');
   showScreen(lobbyScreen);
   connectSocket();
 }
