@@ -204,6 +204,40 @@ function setupGameHandlers(io) {
       }
     });
 
+    // Leave room handler
+    socket.on('leaveRoom', async () => {
+      try {
+        const roomId = socket.data.roomId;
+        if (!roomId) return;
+
+        socket.leave(roomId);
+        const room = await roomManager.removePlayerFromRoom(roomId, socket.id);
+        delete socket.data.roomId;
+
+        if (room) {
+          io.to(roomId).emit('roomUpdate', {
+            id: room.id,
+            title: room.title,
+            creatorId: room.creatorId,
+            players: room.players.map((p) => ({ id: p.id, nickname: p.nickname })),
+            capacity: room.capacity,
+            state: room.state,
+            gameType: room.gameType,
+            location: room.state === 'playing' ? room.location : null,
+            spyId: room.state === 'playing' ? room.spyId : null,
+            availableLocations: room.state === 'playing' && room.gameType === 'spy' ? room.availableLocations : null,
+            currentVotingTarget: room.currentVotingTarget,
+            chat: room.chat
+          });
+        }
+
+        const allRooms = await roomManager.getAllRooms();
+        io.emit('roomList', allRooms);
+      } catch (error) {
+        console.error('Error in leaveRoom:', error);
+      }
+    });
+
     // Start game handler
     socket.on('startGame', async () => {
       try {

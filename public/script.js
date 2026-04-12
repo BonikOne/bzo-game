@@ -858,7 +858,15 @@ window.addEventListener('load', () => {
     showScreen(chooseScreen);
   });
 
+  function leaveCurrentRoom() {
+    if (socket && socket.connected && currentRoom) {
+      socket.emit('leaveRoom');
+    }
+    currentRoom = null;
+  }
+
   backToRooms.addEventListener('click', () => {
+    leaveCurrentRoom();
     showScreen(roomListScreen);
   });
 
