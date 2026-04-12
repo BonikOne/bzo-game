@@ -4,7 +4,10 @@ import time
 time.sleep(5)  # 5 секунд чтобы ты успел переключиться в консоль
 
 text = """
-sudo docker volume prune
+docker-compose down && \
+git pull origin main && \
+export COMPOSE_HTTP_TIMEOUT=300 && \
+docker-compose up --build -d
 """
 
 for line in text.split("\n"):

@@ -172,7 +172,10 @@
     </section>
 
     <section id="choose-screen" class="card screen">
-      <h2>Выбери игру</h2>
+      <div class="menu-topbar">
+        <h2>Выбери игру</h2>
+        <button id="backToMenu" class="btn btn-ghost">← Назад</button>
+      </div>
       <div class="game-grid">
         <div class="game-card active spy-card" id="spy-card">
           <img src="images/spy-game.png" alt="Шпион" style="width: 100%; height: 150px; object-fit: cover;">
@@ -225,11 +228,13 @@
           </div>
         </div>
       </div>
-      <button id="backToMenu" class="btn secondary">Назад</button>
     </section>
 
     <section id="room-list-screen" class="card screen">
-      <h2>Выбор комнаты</h2>
+      <div class="menu-topbar">
+        <h2>Выбор комнаты</h2>
+        <button id="backToChooseFromRooms" class="btn btn-ghost">← Назад</button>
+      </div>
       <div class="lobby-panel">
         <div class="lobby-row">
           <button id="findRoomButton" class="btn primary">Создать / Присоединиться</button>
@@ -241,11 +246,13 @@
         </div>
         <div class="room-list" id="roomList"></div>
       </div>
-      <button id="backToChooseFromRooms" class="btn secondary">Назад</button>
     </section>
 
     <section id="lobby-screen" class="card screen">
-      <h2>Лобби комнаты</h2>
+      <div class="menu-topbar">
+        <h2>Лобби комнаты</h2>
+        <button id="backToRooms" class="btn btn-ghost">← Назад</button>
+      </div>
       <div class="lobby-columns">
         <div class="lobby-panel">
           <div class="room-info" id="roomInfo">
@@ -269,7 +276,6 @@
           </div>
         </div>
       </div>
-      <button id="backToRooms" class="btn secondary">Назад к списку</button>
     </section>
 
     <section id="table-screen" class="screen">

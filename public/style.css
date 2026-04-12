@@ -840,7 +840,8 @@ body::before {
 #choose-screen h2,
 #lobby-screen h2 {
   margin-top: 0;
-  font-size: clamp(1.5rem, 1.8vw, 2rem);
+  margin-left: 10px;
+  font-size: clamp(2rem, 2.2vw, 2.6rem);
   letter-spacing: -0.04em;
   color: transparent;
   background: linear-gradient(135deg, #fbbf24 0%, #a78bfa 100%);
@@ -857,9 +858,25 @@ body::before {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 16px;
   margin-bottom: 28px;
+}
+
+.menu-topbar h2 {
+  margin: 0;
+  margin-right: auto;
+  flex: 1;
+  font-size: clamp(2rem, 2.2vw, 2.6rem);
+  letter-spacing: -0.04em;
+  color: transparent;
+  background: linear-gradient(135deg, #fbbf24 0%, #a78bfa 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+
+.menu-topbar .menu-user {
+  margin-right: auto;
 }
 
 .menu-user .small-label {
@@ -867,6 +884,8 @@ body::before {
   color: var(--text-muted);
   font-size: 0.95rem;
   margin-bottom: 6px;
+  margin-left: 8px;   /* вправо */
+  margin-top: 4px;    /* вниз */
 }
 
 .menu-user h3 {
@@ -973,7 +992,7 @@ input[type='password'] {
 
 .game-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  grid-template-columns: repeat(3, 1fr);
   gap: 20px;
 }
 
