@@ -1,5 +1,28 @@
 const roomManager = require('./roomManager');
 const { LOCATIONS, shuffle, createCodenamesSetup, assignTeams } = require('./gameUtils');
+const fs = require('fs');
+const path = require('path');
+
+function loadImaginariumCards() {
+  const cardsDir = path.join(__dirname, 'public', 'imaginarium', 'cards');
+  try {
+    if (!fs.existsSync(cardsDir)) return [];
+    return fs.readdirSync(cardsDir)
+      .filter((file) => /\.(png|jpe?g|webp|gif)$/i.test(file))
+      .map((file) => ({ label: path.parse(file).name, image: `/imaginarium/cards/${encodeURIComponent(file)}` }));
+  } catch (error) {
+    console.error('Ошибка загрузки карточек Имаджинариум:', error);
+    return [];
+  }
+}
+
+function createImaginariumDeck() {
+  const cards = loadImaginariumCards();
+  if (cards.length > 0) {
+    return shuffle(cards);
+  }
+  return Array.from({ length: 85 }, (_, i) => `Карта ${i + 1}`);
+}
 
 // Game event handlers
 function setupGameHandlers(io) {
@@ -245,6 +268,52 @@ function setupGameHandlers(io) {
               phaseTimer: room.phaseTimer
             });
           });
+        } else if (room.gameType === 'imaginarium') {
+          if (room.players.length < 3) {
+            socket.emit('error', 'Нужно минимум 3 игрока для Имаджинариума.');
+            return;
+          }
+
+          const deck = createImaginariumDeck();
+          const handSize = Math.min(6, Math.floor(deck.length / room.players.length));
+          const shuffledDeck = shuffle(deck.slice());
+          room.imaginariumHands = {};
+          room.players.forEach((player) => {
+            room.imaginariumHands[player.id] = shuffledDeck.splice(0, handSize);
+          });
+          room.imaginariumDeck = shuffledDeck;
+
+          room.currentLeaderIndex = room.currentLeaderIndex || 0;
+          room.leaderId = room.players[room.currentLeaderIndex].id;
+          room.association = null;
+          room.chosenCard = null;
+          room.submissions = {};
+          room.tableCards = [];
+          room.scores = room.scores || {};
+          room.players.forEach((player) => {
+            if (room.scores[player.id] == null) {
+              room.scores[player.id] = 0;
+            }
+          });
+          room.round = room.round || 1;
+          room.phase = 'choose';
+          room.phaseTimer = 0;
+
+          room.players.forEach((player) => {
+            const isLeader = player.id === room.leaderId;
+            io.to(player.id).emit('gameStarted', {
+              gameType: 'imaginarium',
+              players: room.players.map((p) => ({ id: p.id, nickname: p.nickname })),
+              hand: room.imaginariumHands[player.id],
+              leaderId: room.leaderId,
+              association: room.association,
+              scores: room.scores,
+              round: room.round,
+              phase: room.phase,
+              phaseTimer: room.phaseTimer,
+              isLeader
+            });
+          });
         } else {
           // Spy game
           room.availableLocations = shuffle(LOCATIONS).slice(0, 25);
@@ -304,6 +373,181 @@ function setupGameHandlers(io) {
         await roomManager.updateRoom(room.id, room);
       } catch (error) {
         console.error('Error sending hint:', error);
+      }
+    });
+
+    // Imaginarium association handler
+    socket.on('submitAssociation', async ({ index, association }) => {
+      try {
+        const room = await getValidatedRoom(socket, 'imaginarium');
+        if (!room || room.phase !== 'choose') return;
+        if (socket.id !== room.leaderId) return;
+        const hand = room.imaginariumHands?.[socket.id] || [];
+        if (index < 0 || index >= hand.length) return;
+        if (!association || typeof association !== 'string' || !association.trim()) return;
+
+        room.chosenCard = { playerId: socket.id, nickname: socket.data.nickname, card: hand[index] };
+        room.imaginariumHands[socket.id] = hand.filter((_, i) => i !== index);
+        room.association = association.trim();
+        room.phase = 'submit';
+        room.phaseTimer = 0;
+        room.votes = {};
+        room.submissions = {};
+
+        io.to(room.id).emit('gameMessage', { system: true, text: `Ведущий выбрал карту и дал ассоциацию: «${room.association}»` });
+        io.to(room.id).emit('imaginariumPhaseChanged', {
+          phase: room.phase,
+          association: room.association,
+          phaseTimer: room.phaseTimer,
+          leaderId: room.leaderId,
+          round: room.round
+        });
+
+        await roomManager.updateRoom(room.id, room);
+      } catch (error) {
+        console.error('Error submitting association:', error);
+      }
+    });
+
+    socket.on('submitCard', async ({ index }) => {
+      try {
+        const room = await getValidatedRoom(socket, 'imaginarium', 'submit');
+        if (!room) return;
+        if (socket.id === room.leaderId) return;
+        const hand = room.imaginariumHands?.[socket.id] || [];
+        if (index < 0 || index >= hand.length) return;
+
+        const card = hand[index];
+        room.imaginariumHands[socket.id] = hand.filter((_, i) => i !== index);
+        room.submissions[socket.id] = { playerId: socket.id, nickname: socket.data.nickname, card };
+
+        const expected = room.players.length - 1;
+        if (Object.keys(room.submissions).length >= expected && room.chosenCard) {
+          const tableCards = shuffle([
+            ...Object.values(room.submissions),
+            { ...room.chosenCard, isLeader: true }
+          ]).map((item, tableIndex) => ({ ...item, tableIndex }));
+
+          room.tableCards = tableCards;
+          room.phase = 'reveal';
+          room.phaseTimer = 0;
+          room.votes = {};
+
+          io.to(room.id).emit('gameMessage', { system: true, text: 'Все карты собраны. Начинается голосование.' });
+          io.to(room.id).emit('imaginariumReveal', {
+            tableCards: room.tableCards,
+            association: room.association,
+            phaseTimer: room.phaseTimer,
+            leaderId: room.leaderId,
+            scores: room.scores,
+            round: room.round
+          });
+        }
+
+        await roomManager.updateRoom(room.id, room);
+      } catch (error) {
+        console.error('Error submitting card:', error);
+      }
+    });
+
+    socket.on('voteForCard', async ({ tableIndex }) => {
+      try {
+        const room = await getValidatedRoom(socket, 'imaginarium', 'reveal');
+        if (!room) return;
+        if (socket.id === room.leaderId) return;
+        if (room.votes?.[socket.id] != null) return;
+
+        const tableCard = room.tableCards?.[tableIndex];
+        if (!tableCard) return;
+
+        room.votes[socket.id] = tableIndex;
+
+        const voters = room.players.filter((p) => p.id !== room.leaderId);
+        const allVoted = voters.every((p) => room.votes?.[p.id] != null);
+
+        if (allVoted) {
+          const correctVotes = voters.filter((p) => {
+            const voted = room.votes[p.id];
+            return room.tableCards[voted]?.playerId === room.leaderId;
+          }).length;
+
+          const totalVotes = voters.length;
+          const leaderScore = correctVotes === 0 || correctVotes === totalVotes ? 0 : 3 + correctVotes;
+          room.scores[room.leaderId] = (room.scores[room.leaderId] || 0) + leaderScore;
+
+          voters.forEach((player) => {
+            const voted = room.votes[player.id];
+            if (room.tableCards[voted]?.playerId === room.leaderId) {
+              room.scores[player.id] = (room.scores[player.id] || 0) + 3;
+            }
+          });
+
+          room.tableCards.forEach((card) => {
+            if (card.playerId !== room.leaderId) {
+              const votesForCard = Object.values(room.votes).filter((voteIndex) => room.tableCards[voteIndex]?.playerId === card.playerId).length;
+              room.scores[card.playerId] = (room.scores[card.playerId] || 0) + votesForCard;
+            }
+          });
+
+          const winner = room.players.find((p) => (room.scores[p.id] || 0) >= 39);
+          if (winner) {
+            room.state = 'ended';
+            io.to(room.id).emit('gameMessage', { system: true, text: `Игра окончена! Победитель: ${winner.nickname}` });
+            io.to(room.id).emit('gameEnded', {
+              winner: winner.id,
+              reason: 'score',
+              players: room.players.map((p) => ({ id: p.id, nickname: p.nickname }))
+            });
+            scheduleRoomReset(room, io, `Победил ${winner.nickname}. Можно начать новую игру.`);
+          } else {
+            // Обновить руки: удалить отправленную карту, добавить новую
+            room.players.forEach((player) => {
+              const submitted = room.tableCards.find((t) => t.playerId === player.id);
+              if (submitted) {
+                const hand = room.imaginariumHands[player.id];
+                const index = hand.findIndex((c) => c.label === submitted.card.label && c.image === submitted.card.image);
+                if (index !== -1) {
+                  hand.splice(index, 1);
+                }
+              }
+              // Добрать до 6 карт
+              while (room.imaginariumHands[player.id].length < 6 && room.imaginariumDeck.length > 0) {
+                room.imaginariumHands[player.id].push(room.imaginariumDeck.pop());
+              }
+            });
+
+            room.tableCards = [];
+            room.round += 1;
+            room.currentLeaderIndex = (room.currentLeaderIndex + 1) % room.players.length;
+            room.leaderId = room.players[room.currentLeaderIndex].id;
+            room.association = null;
+            room.chosenCard = null;
+            room.submissions = {};
+            room.votes = {};
+            room.phase = 'choose';
+            room.phaseTimer = 0;
+
+            io.to(room.id).emit('gameMessage', { system: true, text: `Раунд ${room.round}. Ведущий: ${room.players[room.currentLeaderIndex].nickname}` });
+            room.players.forEach((player) => {
+              io.to(player.id).emit('gameStarted', {
+                gameType: 'imaginarium',
+                players: room.players.map((p) => ({ id: p.id, nickname: p.nickname })),
+                hand: room.imaginariumHands[player.id],
+                leaderId: room.leaderId,
+                association: room.association,
+                scores: room.scores,
+                round: room.round,
+                phase: room.phase,
+                phaseTimer: room.phaseTimer,
+                isLeader: player.id === room.leaderId
+              });
+            });
+          }
+        }
+
+        await roomManager.updateRoom(room.id, room);
+      } catch (error) {
+        console.error('Error voting in imaginarium:', error);
       }
     });
 
@@ -676,9 +920,15 @@ function setupGameHandlers(io) {
           console.log(`Deleting empty room ${roomId}`);
           await roomManager.deleteRoom(roomId);
         } else {
-          if (room.state === 'playing' && !room.players.find((player) => player.id === room.spyId)) {
-            room.state = 'ended';
-            io.to(room.id).emit('gameMessage', { system: true, text: 'Игра закончилась, потому что шпион покинул комнату.' });
+          if (room.state === 'playing') {
+            if (room.gameType === 'spy' && !room.players.find((player) => player.id === room.spyId)) {
+              room.state = 'ended';
+              io.to(room.id).emit('gameMessage', { system: true, text: 'Игра закончилась, потому что шпион покинул комнату.' });
+            }
+            if (room.gameType === 'imaginarium') {
+              room.state = 'ended';
+              io.to(room.id).emit('gameMessage', { system: true, text: 'Игра закончилась, потому что игрок покинул комнату.' });
+            }
           }
 
           io.to(room.id).emit('roomUpdate', {
@@ -772,6 +1022,15 @@ async function scheduleRoomReset(room, io, message) {
     room.hasVotedForGuess = [];
     room.playerSelections = {};
     room.playerPasses = [];
+    room.imaginariumHands = null;
+    room.leaderId = null;
+    room.association = null;
+    room.chosenCard = null;
+    room.submissions = {};
+    room.tableCards = [];
+    room.scores = {};
+    room.round = 1;
+    room.currentLeaderIndex = 0;
 
     if (message) {
       room.chat.push({ system: true, text: message });

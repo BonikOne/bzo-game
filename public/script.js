@@ -39,6 +39,7 @@ const logoutButton = document.getElementById('logoutButton');
 const currentUserLabel = document.getElementById('currentUserLabel');
 const spyCard = document.getElementById('spy-card');
 const codenamesCard = document.getElementById('codenames-card');
+const imaginariumCard = document.getElementById('imaginarium-card');
 const backToMenu = document.getElementById('backToMenu');
 const backToChooseFromRooms = document.getElementById('backToChooseFromRooms');
 const backToRooms = document.getElementById('backToRooms');
@@ -102,6 +103,16 @@ let currentHint = null;
 let currentPhaseTimer = 60;
 let playerSelections = {};
 
+let currentImaginariumHand = [];
+let currentImaginariumPhase = null;
+let currentAssociation = null;
+let currentImaginariumTable = [];
+let currentImaginariumScores = {};
+let currentLeaderId = null;
+let currentRound = 0;
+let currentImaginariumVotedIndex = null;
+let currentSelectedImaginariumIndex = null;
+
 const LOCATION_THEMES = {
   'Космодром': 'loc-space',
   'Больница': 'loc-medical',
@@ -142,6 +153,13 @@ function getLocationTheme(location) {
   return LOCATION_THEMES[location] || 'loc-default';
 }
 
+function getGameDisplayName(gameType) {
+  if (gameType === 'spy') return 'Шпион';
+  if (gameType === 'codenames') return 'Код Неймс';
+  if (gameType === 'imaginarium') return 'Имаджинариум';
+  return 'Игра';
+}
+
 let socket = null;
 let socketErrorLogged = false;
 let currentRoom = null;
@@ -170,8 +188,10 @@ function selectGame(gameType) {
   currentGame = gameType;
   spyCard.classList.toggle('active', gameType === 'spy');
   codenamesCard.classList.toggle('active', gameType === 'codenames');
+  imaginariumCard.classList.toggle('active', gameType === 'imaginarium');
   document.body.classList.toggle('spy-theme', gameType === 'spy');
   document.body.classList.toggle('codenames-theme', gameType === 'codenames');
+  document.body.classList.toggle('imaginarium-theme', gameType === 'imaginarium');
   showScreen(roomListScreen);
   connectSocket();
 }
@@ -313,7 +333,7 @@ function connectSocket() {
     renderRoomActions(room);
     renderChat(room.chat);
   });
-  socket.on('gameStarted', ({ gameType, isSpy, location, players, availableLocations, words, currentTeam: team, isCaptain, playerTeam, teamCaptains, keyMap, revealed, teams, phase, hint, phaseTimer }) => {
+  socket.on('gameStarted', ({ gameType, isSpy, location, players, availableLocations, words, currentTeam: team, isCaptain, playerTeam, teamCaptains, keyMap, revealed, teams, phase, hint, phaseTimer, hand, leaderId, association, tableCards, scores, round, isLeader }) => {
     currentGame = gameType || 'spy';
     if (currentGame === 'codenames') {
       currentPlayers = players;
@@ -329,6 +349,19 @@ function connectSocket() {
       currentHint = hint || null;
       currentPhaseTimer = phaseTimer || 60;
       playerRole.innerHTML = '';
+    } else if (currentGame === 'imaginarium') {
+      currentPlayers = players;
+      currentImaginariumHand = hand || [];
+      currentLeaderId = leaderId;
+      currentImaginariumPhase = phase || 'choose';
+      currentAssociation = association || null;
+      currentImaginariumTable = tableCards || [];
+      currentImaginariumScores = scores || {};
+      currentRound = round || 1;
+      currentPhaseTimer = phaseTimer || 0;
+      currentRole = isLeader ? 'leader' : 'player';
+      currentLocation = null;
+      currentLocations = [];
     } else {
       currentPlayers = players;
       currentRole = isSpy ? 'spy' : 'agent';
@@ -372,6 +405,30 @@ function connectSocket() {
     currentPhaseTimer = time;
     renderGameTable(currentPlayers, false, null);
   });
+  socket.on('imaginariumPhaseChanged', ({ phase, association, phaseTimer, leaderId, round }) => {
+    currentImaginariumPhase = phase;
+    currentAssociation = association || null;
+    currentLeaderId = leaderId || currentLeaderId;
+    currentRound = round || currentRound;
+    currentPhaseTimer = phaseTimer || 0;
+    currentImaginariumVotedIndex = null;
+    renderGameTable(currentPlayers, false, null);
+  });
+  socket.on('imaginariumReveal', ({ tableCards, association, phaseTimer, leaderId, scores, round }) => {
+    currentImaginariumTable = tableCards || [];
+    currentAssociation = association || currentAssociation;
+    currentLeaderId = leaderId || currentLeaderId;
+    currentImaginariumPhase = 'reveal';
+    currentPhaseTimer = phaseTimer || 0;
+    currentImaginariumScores = scores || currentImaginariumScores;
+    currentRound = round || currentRound;
+    currentImaginariumVotedIndex = null;
+    renderGameTable(currentPlayers, false, null);
+  });
+  socket.on('imaginariumScoreUpdate', ({ scores }) => {
+    currentImaginariumScores = scores || currentImaginariumScores;
+    renderGameTable(currentPlayers, false, null);
+  });
   socket.on('voteStarted', ({ targetId }) => {
     showMessage('Голосование начато');
   });
@@ -383,6 +440,9 @@ function connectSocket() {
     let resultText = 'Игра окончена';
     if (currentGame === 'codenames') {
       resultText = winner === 'red' ? 'Победила красная команда!' : 'Победила синяя команда!';
+    } else if (currentGame === 'imaginarium') {
+      const winnerPlayer = players.find((p) => p.id === winner);
+      resultText = winnerPlayer ? `Победитель: ${winnerPlayer.nickname}` : 'Игра окончена';
     } else {
       const isSpy = socket.id === spyId;
       const resultTexts = {
@@ -415,6 +475,7 @@ function renderRoomList(rooms) {
         (room) => `<div class="room-card">
             <strong>${room.title}</strong>
             <p>${room.players} / ${room.capacity} игроков</p>
+            <p>Игра: <strong>${getGameDisplayName(room.gameType)}</strong></p>
             <p>${room.state === 'waiting' ? 'Ожидание игроков' : 'Игра началась'}</p>
             <button class="secondary" data-room="${room.id}" ${room.state !== 'waiting' ? 'disabled' : ''}>Присоединиться</button>
           </div>`
@@ -433,7 +494,7 @@ function renderRoomInfo(room) {
     roomCodeText.textContent = room.id;
     roomDetails.innerHTML = `
        <p>Комната: <strong>${room.title}</strong></p>
-       <p>Игра: <strong>${room.gameType === 'codenames' ? 'Код Неймс' : 'Шпион'}</strong></p>
+       <p>Игра: <strong>${getGameDisplayName(room.gameType)}</strong></p>
        <p>Состояние: <strong>${room.state === 'waiting' ? 'Ожидание игроков' : 'Игра в процессе'}</strong></p>
        <p>Игроков: <strong>${(room.players?.length || 0)}/${room.capacity || 6}</strong></p>`;
   } else {
@@ -453,7 +514,8 @@ function renderPlayers(players = [], creatorId, state) {
 
 function renderRoomActions(room) {
   const isCreator = socket?.id === room.creatorId;
-  const canStart = room.state === 'waiting' && room.players.length >= 4 && isCreator;
+  const minPlayers = room.gameType === 'imaginarium' ? 3 : 4;
+  const canStart = room.state === 'waiting' && room.players.length >= minPlayers && isCreator;
   const actionHtml = canStart ? '<button id="startGame" class="primary">Начать игру</button>' : '';
   roomActions.innerHTML = actionHtml;
 
@@ -486,6 +548,88 @@ function appendTableChatMessage(message) {
 }
 
 function renderGameTable(players, isSpy, location) {
+  if (currentGame === 'imaginarium') {
+    tableTitle.textContent = 'Имаджинариум';
+    const leader = currentPlayers.find((p) => p.id === currentLeaderId);
+    const isLeader = socket?.id === currentLeaderId;
+    const heading = currentImaginariumPhase === 'choose'
+      ? isLeader ? 'Вы ведущий – выберите карту и напишите ассоциацию' : `Ожидайте, ведущий ${leader?.nickname || 'игрок'} выбирает карту` 
+      : currentImaginariumPhase === 'submit'
+        ? isLeader ? 'Ожидайте, ведущий выбрал карту' : 'Выберите карту из своей руки, которая лучше всего подходит к ассоциации'
+        : currentImaginariumPhase === 'reveal'
+          ? 'Голосуйте, какую карту выбрал ведущий'
+          : 'Ожидайте результатов';
+
+    playerRole.innerHTML = `
+      <h3>${heading}</h3>
+      <p>Раунд: ${currentRound}</p>
+      <p>Ведущий: ${leader?.nickname || '—'}</p>
+      <p>Ассоциация: ${currentAssociation ? `«${currentAssociation}»` : 'не задана'}</p>
+      <p>Очки: ${currentImaginariumScores[socket?.id] || 0}</p>
+    `;
+
+    if (currentImaginariumPhase === 'choose' && isLeader) {
+      cardsGrid.innerHTML = currentImaginariumHand
+        .map((card, index) => `
+          <div class="location-card imaginarium-card${currentSelectedImaginariumIndex === index ? ' selected' : ''}" data-index="${index}">
+            <img src="${card.image}" alt="${card.label}" class="card-image">
+          </div>
+        `)
+        .join('');
+      cardsGrid.querySelectorAll('.location-card').forEach((card) => {
+        card.addEventListener('click', () => {
+          const index = Number(card.dataset.index);
+          currentSelectedImaginariumIndex = index;
+          hintModal.querySelector('h3').textContent = 'Напишите ассоциацию для выбранной карты';
+          hintInput.placeholder = 'Ассоциация...';
+          hintModal.style.display = 'flex';
+        });
+      });
+    } else if (currentImaginariumPhase === 'submit') {
+      cardsGrid.innerHTML = currentImaginariumHand
+        .map((card, index) => `
+          <div class="location-card imaginarium-card" data-index="${index}">
+            <img src="${card.image}" alt="${card.label}" class="card-image">
+          </div>
+        `)
+        .join('');
+      cardsGrid.querySelectorAll('.location-card').forEach((card) => {
+        card.addEventListener('click', () => {
+          const index = Number(card.dataset.index);
+          socket.emit('submitCard', { index });
+          showMessage('Карта отправлена ведущему. Ожидайте следующего этапа.');
+        });
+      });
+    } else if (currentImaginariumPhase === 'reveal') {
+      cardsGrid.innerHTML = currentImaginariumTable
+        .map((card, index) => `
+          <div class="location-card imaginarium-card${currentImaginariumVotedIndex === index ? ' selected' : ''}${card.playerId === socket?.id ? ' my-submitted-card' : ''}" data-index="${index}">
+            <img src="${card.card.image}" alt="${card.card.label}" class="card-image">
+          </div>
+        `)
+        .join('');
+      cardsGrid.querySelectorAll('.location-card').forEach((card) => {
+        const index = Number(card.dataset.index);
+        const tableCard = currentImaginariumTable[index];
+        if (!isLeader && tableCard?.playerId !== socket?.id) {
+          card.addEventListener('click', () => {
+            currentImaginariumVotedIndex = index;
+            socket.emit('voteForCard', { tableIndex: index });
+            showMessage('Ваш голос отправлен. Ожидайте окончания голосования.');
+            renderGameTable(currentPlayers, false, null);
+          });
+        }
+      });
+    } else {
+      cardsGrid.innerHTML = `<div class="info-card"><p>Ожидайте, игра начинается.</p></div>`;
+    }
+
+    playersOnTable.innerHTML = `<h3>Счёт</h3><ul>${currentPlayers.map((p) => `
+      <li>${p.nickname}${p.id === currentLeaderId ? ' (ведущий)' : ''} — ${currentImaginariumScores[p.id] || 0}</li>
+    `).join('')}</ul>`;
+
+    return;
+  }
   if (currentGame === 'codenames') {
     tableTitle.textContent = 'Код Неймс';
     cardsGrid.innerHTML = currentWords
@@ -521,7 +665,6 @@ function renderGameTable(players, isSpy, location) {
 
     let roleHtml = '';
     if (currentIsCaptain && currentTeam === currentPlayerTeam && currentPhase === 'hint') {
-      // Show hint modal
       hintModal.style.display = 'flex';
       roleHtml = `
         <h3>👑 ВЫ КАПИТАН ${currentPlayerTeam === 'red' ? 'КРАСНОЙ' : 'СИНИЙ'} КОМАНДЫ</h3>
@@ -555,22 +698,6 @@ function renderGameTable(players, isSpy, location) {
     }
     playerRole.innerHTML = roleHtml;
 
-    // Event listeners for hint modal
-    if (sendHintBtn) {
-      sendHintBtn.onclick = () => {
-        const hint = hintInput.value.trim();
-        if (hint) {
-          socket.emit('sendHint', { hint });
-          hintInput.value = '';
-          hintModal.style.display = 'none';
-        }
-      };
-    }
-    if (cancelHintBtn) {
-      cancelHintBtn.onclick = () => {
-        hintModal.style.display = 'none';
-      };
-    }
     const passTurnBtn = document.getElementById('passTurnBtn');
     passTurnBtn?.addEventListener('click', () => {
       socket.emit('passTurn');
@@ -697,12 +824,16 @@ window.addEventListener('load', () => {
     }
   });
 
-  spyCard.querySelector('button').addEventListener('click', () => {
+  spyCard.addEventListener('click', () => {
     selectGame('spy');
   });
 
-  codenamesCard.querySelector('button').addEventListener('click', () => {
+  codenamesCard.addEventListener('click', () => {
     selectGame('codenames');
+  });
+
+  imaginariumCard.addEventListener('click', () => {
+    selectGame('imaginarium');
   });
 
   backToMenu.addEventListener('click', () => {
@@ -789,6 +920,28 @@ window.addEventListener('load', () => {
       showMessage('Код скопирован в буфер обмена!');
     });
   });
+
+  if (sendHintBtn) {
+    sendHintBtn.addEventListener('click', () => {
+      const hint = hintInput.value.trim();
+      if (!hint || !socket) return;
+      if (currentGame === 'imaginarium' && currentImaginariumPhase === 'choose' && currentSelectedImaginariumIndex !== null) {
+        socket.emit('submitAssociation', { index: currentSelectedImaginariumIndex, association: hint });
+        currentSelectedImaginariumIndex = null;
+      } else {
+        socket.emit('sendHint', { hint });
+      }
+      hintInput.value = '';
+      hintModal.style.display = 'none';
+    });
+  }
+
+  if (cancelHintBtn) {
+    cancelHintBtn.addEventListener('click', () => {
+      currentSelectedImaginariumIndex = null;
+      hintModal.style.display = 'none';
+    });
+  }
 
   sendChat.addEventListener('click', () => {
     const text = chatInput.value.trim();

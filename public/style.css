@@ -1034,6 +1034,14 @@ body.table-view .app-shell {
   filter: saturate(1.2) contrast(1.05);
 }
 
+img.card-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+  position: relative;
+}
+
 .game-card-info {
   position: absolute;
   left: 16px;
@@ -1231,6 +1239,32 @@ body.table-view .app-shell {
 
 .codenames-card .card-image {
   background-image: linear-gradient(135deg, rgba(212, 121, 54, 0.35), rgba(79, 142, 236, 0.35)), radial-gradient(circle at 30% 30%, rgba(255, 215, 0, 0.22), transparent 0 90px), radial-gradient(circle at 70% 70%, rgba(147, 112, 219, 0.18), transparent 0 100px);
+}
+
+.imaginarium-card .card-image {
+  /* background removed for img display */
+}
+
+body.imaginarium-theme {
+  background: radial-gradient(circle at top left, rgba(145, 70, 255, 0.15), transparent 25%), linear-gradient(180deg, #14072f 0%, #090814 100%);
+}
+
+.location-card.imaginarium-card {
+  background: linear-gradient(180deg, rgba(85, 30, 130, 0.92), rgba(35, 10, 55, 0.96));
+}
+
+.location-card.imaginarium-card .location-label {
+  color: #ffeaff;
+}
+
+.location-card.imaginarium-card.selected {
+  box-shadow: 0 0 20px rgba(200, 130, 255, 0.85);
+  border-color: rgba(200, 130, 255, 0.85);
+}
+
+.location-card.imaginarium-card.my-submitted-card {
+  opacity: 0.5;
+  filter: grayscale(50%);
 }
 
 .racing-card .card-image {
