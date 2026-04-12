@@ -322,6 +322,23 @@ class RoomManager {
       console.error('Error cleaning up old rooms:', error);
     }
   }
+
+  async clearAllRooms() {
+    try {
+      const keys = await this.redis.keys('room:*');
+      if (keys.length > 0) {
+        await this.redis.del(keys);
+      }
+      for (const intervalId of this.phaseIntervals.values()) {
+        clearInterval(intervalId);
+      }
+      this.phaseIntervals.clear();
+      this.inMemoryRooms.clear();
+      console.log('All rooms cleared successfully');
+    } catch (error) {
+      console.error('Error clearing all rooms:', error);
+    }
+  }
 }
 
 module.exports = new RoomManager();

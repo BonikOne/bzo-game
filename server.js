@@ -97,8 +97,10 @@ async function startServer() {
         setTimeout(() => reject(new Error('Redis connection timeout')), 5000);
       });
       console.log(`Worker ${process.pid} connected to Redis`);
+      await roomManager.clearAllRooms();
     } else {
       console.log(`Worker ${process.pid} started without Redis (development mode)`);
+      roomManager.clearAllRooms();
     }
   } catch (error) {
     if (process.env.NODE_ENV === 'production') {
@@ -106,6 +108,7 @@ async function startServer() {
       process.exit(1);
     } else {
       console.log(`Worker ${process.pid} started without Redis (development mode)`);
+      roomManager.clearAllRooms();
     }
   }
 }
@@ -118,12 +121,12 @@ const locations = [
   'Кинотеатр', 'Станция метро', 'Пайплайн', 'Фабрика', 'Скайпортик'
 ];
 
-// Serve static files with caching
+// Serve static files with caching for assets, but avoid stale CSS/JS when files change
 app.use(express.static('public', {
-  maxAge: '1y', // Cache for 1 year
+  maxAge: '1y', // Long cache lifetime for fingerprinted assets
   setHeaders: (res, path) => {
-    if (path.endsWith('.html')) {
-      res.setHeader('Cache-Control', 'no-cache'); // Don't cache HTML
+    if (path.endsWith('.html') || path.endsWith('.css') || path.endsWith('.js') || path.endsWith('.json') || path.endsWith('.svg')) {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     }
   }
 }));

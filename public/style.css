@@ -816,7 +816,9 @@ body::before {
   display: block;
 }
 
+#main-menu,
 #choose-screen,
+#room-list-screen,
 #lobby-screen {
   background: linear-gradient(135deg, rgba(12, 18, 28, 0.96), rgba(18, 26, 42, 0.96));
   border: 1px solid rgba(255, 255, 255, 0.16);
@@ -826,6 +828,7 @@ body::before {
 }
 
 #choose-screen::before,
+#room-list-screen::before,
 #lobby-screen::before {
   content: '';
   position: absolute;
@@ -837,7 +840,9 @@ body::before {
   z-index: -1;
 }
 
+#main-menu h2,
 #choose-screen h2,
+#room-list-screen h2,
 #lobby-screen h2 {
   margin-top: 0;
   margin-left: 10px;
@@ -850,8 +855,21 @@ body::before {
 }
 
 #choose-screen .game-grid,
+#room-list-screen .lobby-panel,
 #lobby-screen .lobby-columns {
   margin-top: 24px;
+}
+
+#room-list-screen .lobby-panel {
+  padding: 0 !important;
+  background: none !important;
+  border: none !important;
+  box-shadow: none !important;
+  gap: 24px !important;
+}
+
+#room-list-screen .lobby-panel::before {
+  display: none !important;
 }
 
 .menu-topbar {
@@ -1166,12 +1184,18 @@ img.card-image {
 .join-by-code {
   display: flex;
   gap: 10px;
-  align-items: center;
-  margin-bottom: 16px;
+  align-items: flex-start;
+  margin-bottom: 0;
 }
 
 .join-by-code .input-field {
   flex: 1;
+  min-height: 52px;
+  margin-top: 2px;
+}
+
+.join-by-code .btn {
+  height: 52px;
 }
 
 .room-code-display {
