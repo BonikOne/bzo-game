@@ -143,6 +143,7 @@ function getLocationTheme(location) {
 }
 
 let socket = null;
+let socketErrorLogged = false;
 let currentRoom = null;
 let currentPlayerId = null;
 let currentNickname = null;
@@ -267,14 +268,31 @@ function closeStatsModal() {
 function connectSocket() {
   if (socket) return;
   console.log('Connecting to Socket.IO...');
-  socket = io();
+  socket = io({
+    path: '/socket.io',
+    transports: ['websocket', 'polling'],
+    reconnection: true,
+    reconnectionAttempts: 5,
+    reconnectionDelay: 2000,
+    timeout: 20000
+  });
   socket.on('connect', () => {
     console.log('Socket.IO connected');
+    socketErrorLogged = false;
     currentPlayerId = socket.id;
     socket.emit('requestRooms');
   });
   socket.on('connect_error', (error) => {
-    console.log('Socket.IO connection error:', error);
+    if (!socketErrorLogged) {
+      console.log('Socket.IO connection error:', error);
+      showMessage('Не удалось подключиться к серверу. Проверьте, что сервер запущен на http://localhost:3000');
+      socketErrorLogged = true;
+    }
+  });
+  socket.on('reconnect_failed', () => {
+    console.log('Socket.IO reconnection failed');
+    showMessage('Сервер недоступен. Обновите страницу или запустите сервер.');
+    socket = null;
   });
   socket.on('error', (message) => {
     console.log('Server error:', message);
