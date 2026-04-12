@@ -47,6 +47,18 @@ const findRoomButton = document.getElementById('findRoomButton');
 const refreshRooms = document.getElementById('refreshRooms');
 const joinCodeInput = document.getElementById('joinCodeInput');
 const joinByCodeButton = document.getElementById('joinByCodeButton');
+const gameSearchInput = document.getElementById('gameSearchInput');
+const gameCards = Array.from(document.querySelectorAll('#choose-screen .game-card'));
+
+function filterGameCards() {
+  const query = gameSearchInput?.value.trim().toLowerCase() || '';
+  gameCards.forEach((card) => {
+    const title = card.querySelector('h3')?.textContent.toLowerCase() || '';
+    const matches = !query || title.includes(query);
+    card.style.display = matches ? '' : 'none';
+  });
+}
+
 const roomList = document.getElementById('roomList');
 const roomInfo = document.getElementById('roomInfo');
 const roomDetails = document.getElementById('roomDetails');
@@ -823,6 +835,8 @@ window.addEventListener('load', () => {
       closeStatsModal();
     }
   });
+
+  gameSearchInput?.addEventListener('input', filterGameCards);
 
   spyCard.addEventListener('click', () => {
     selectGame('spy');

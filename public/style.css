@@ -860,6 +860,15 @@ body::before {
   margin-top: 24px;
 }
 
+.game-search {
+  width: 100%;
+  margin: 0 0 24px;
+}
+
+.game-search .input-field {
+  width: 100%;
+}
+
 #room-list-screen .lobby-panel {
   padding: 0 !important;
   background: none !important;
