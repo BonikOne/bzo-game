@@ -24,6 +24,126 @@ function createImaginariumDeck() {
   return Array.from({ length: 85 }, (_, i) => `Карта ${i + 1}`);
 }
 
+function isValidChessMove(board, from, to, playerColor) {
+  if (!from || !to) return false;
+  const fromPiece = board[from.row]?.[from.col] || '';
+  const toPiece = board[to.row]?.[to.col] || '';
+  if (!fromPiece) return false;
+
+  const color = fromPiece.startsWith('w') ? 'white' : 'black';
+  if (color !== playerColor) return false;
+  if (toPiece && (toPiece.startsWith('w') ? 'white' : 'black') === color) return false;
+
+  const rowDiff = to.row - from.row;
+  const colDiff = to.col - from.col;
+  const absRow = Math.abs(rowDiff);
+  const absCol = Math.abs(colDiff);
+
+  const pieceType = fromPiece[1];
+  switch (pieceType) {
+    case 'p':
+      const direction = color === 'white' ? -1 : 1;
+      if (colDiff === 0 && rowDiff === direction && !toPiece) return true;
+      if (colDiff === 0 && rowDiff === 2 * direction && ((color === 'white' && from.row === 6) || (color === 'black' && from.row === 1)) && !toPiece && !board[from.row + direction][from.col]) return true;
+      if (absCol === 1 && rowDiff === direction && toPiece) return true;
+      return false;
+    case 'r':
+      if (from.row !== to.row && from.col !== to.col) return false;
+      return isPathClear(board, from, to);
+    case 'n':
+      return (absRow === 2 && absCol === 1) || (absRow === 1 && absCol === 2);
+    case 'b':
+      if (absRow !== absCol) return false;
+      return isPathClear(board, from, to);
+    case 'q':
+      if (from.row !== to.row && from.col !== to.col && absRow !== absCol) return false;
+      return isPathClear(board, from, to);
+    case 'k':
+      return absRow <= 1 && absCol <= 1;
+    default:
+      return false;
+  }
+}
+
+function isPathClear(board, from, to) {
+  const rowStep = Math.sign(to.row - from.row);
+  const colStep = Math.sign(to.col - from.col);
+  let row = from.row + rowStep;
+  let col = from.col + colStep;
+
+  while (row !== to.row || col !== to.col) {
+    if (board[row]?.[col]) return false;
+    row += rowStep;
+    col += colStep;
+  }
+  return true;
+}
+
+function isSquareUnderAttack(board, row, col, byColor) {
+  // Check if square is attacked by opponent pieces
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 8; c++) {
+      const piece = board[r][c];
+      if (!piece || piece[0] !== byColor) continue;
+
+      const from = { row: r, col: c };
+      const to = { row, col };
+      if (isValidChessMove(board, from, to, byColor === 'w' ? 'white' : 'black')) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+function isKingInCheck(board, kingColor) {
+  let kingRow, kingCol;
+  const kingPiece = kingColor === 'white' ? 'wk' : 'bk';
+
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 8; c++) {
+      if (board[r][c] === kingPiece) {
+        kingRow = r;
+        kingCol = c;
+        break;
+      }
+    }
+  }
+
+  const opponentColor = kingColor === 'white' ? 'b' : 'w';
+  return isSquareUnderAttack(board, kingRow, kingCol, opponentColor);
+}
+
+function isCheckmate(board, kingColor) {
+  if (!isKingInCheck(board, kingColor)) return false;
+
+  // Check if any move can get out of check
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 8; c++) {
+      const piece = board[r][c];
+      if (!piece || piece[0] !== (kingColor === 'white' ? 'w' : 'b')) continue;
+
+      for (let tr = 0; tr < 8; tr++) {
+        for (let tc = 0; tc < 8; tc++) {
+          const from = { row: r, col: c };
+          const to = { row: tr, col: tc };
+          if (isValidChessMove(board, from, to, kingColor)) {
+            // Simulate move
+            const tempBoard = board.map(row => [...row]);
+            tempBoard[to.row][to.col] = tempBoard[from.row][from.col];
+            tempBoard[from.row][from.col] = '';
+
+            if (!isKingInCheck(tempBoard, kingColor)) {
+              return false; // Found a move that gets out of check
+            }
+          }
+        }
+      }
+    }
+  }
+  return true; // No moves found, it's checkmate
+}
+
 // Game event handlers
 function setupGameHandlers(io) {
   console.log('Setting up Socket.IO event handlers...');
@@ -250,8 +370,9 @@ function setupGameHandlers(io) {
           return;
         }
 
-        if (room.players.length < 4) {
-          socket.emit('error', 'Нужно минимум 4 игрока для начала игры.');
+        const requiredPlayers = room.gameType === 'imaginarium' ? 3 : room.gameType === 'chess' ? 2 : 4;
+        if (room.players.length < requiredPlayers) {
+          socket.emit('error', `Нужно минимум ${requiredPlayers} игрок${requiredPlayers === 2 ? 'а' : 'ов'} для начала игры.`);
           return;
         }
 
@@ -348,6 +469,33 @@ function setupGameHandlers(io) {
               isLeader
             });
           });
+        } else if (room.gameType === 'chess') {
+          room.chessBoard = [
+            ['br', 'bn', 'bb', 'bq', 'bk', 'bb', 'bn', 'br'],
+            ['bp', 'bp', 'bp', 'bp', 'bp', 'bp', 'bp', 'bp'],
+            ['', '', '', '', '', '', '', ''],
+            ['', '', '', '', '', '', '', ''],
+            ['', '', '', '', '', '', '', ''],
+            ['', '', '', '', '', '', '', ''],
+            ['wp', 'wp', 'wp', 'wp', 'wp', 'wp', 'wp', 'wp'],
+            ['wr', 'wn', 'wb', 'wq', 'wk', 'wb', 'wn', 'wr']
+          ];
+          room.currentTurn = 'white';
+          room.playerColors = {
+            white: room.players[0]?.id,
+            black: room.players[1]?.id
+          };
+
+          room.players.forEach((player) => {
+            const playerColor = player.id === room.playerColors.white ? 'white' : 'black';
+            io.to(player.id).emit('gameStarted', {
+              gameType: 'chess',
+              players: room.players.map((p) => ({ id: p.id, nickname: p.nickname })),
+              chessBoard: room.chessBoard,
+              playerColor,
+              currentTurn: room.currentTurn
+            });
+          });
         } else {
           // Spy game
           room.availableLocations = shuffle(LOCATIONS).slice(0, 25);
@@ -382,6 +530,64 @@ function setupGameHandlers(io) {
       } catch (error) {
         console.error('Error starting game:', error);
         socket.emit('error', 'Failed to start game');
+      }
+    });
+
+    socket.on('moveChessPiece', async ({ from, to }) => {
+      try {
+        const roomId = socket.data.roomId;
+        const room = await roomManager.getRoom(roomId);
+        if (!room || room.state !== 'playing' || room.gameType !== 'chess') return;
+        if (!room.playerColors || room.playerColors[room.currentTurn] !== socket.id) {
+          socket.emit('error', 'Сейчас не ваш ход.');
+          return;
+        }
+
+        if (!isValidChessMove(room.chessBoard, from, to, room.currentTurn)) {
+          socket.emit('error', 'Неверный ход.');
+          return;
+        }
+
+        // Simulate move to check if it puts own king in check
+        const tempBoard = room.chessBoard.map(row => [...row]);
+        tempBoard[to.row][to.col] = tempBoard[from.row][from.col];
+        tempBoard[from.row][from.col] = '';
+
+        if (isKingInCheck(tempBoard, room.currentTurn)) {
+          socket.emit('error', 'Этот ход ставит вашего короля под шах.');
+          return;
+        }
+
+        const movingPiece = room.chessBoard[from.row][from.col];
+        const targetPiece = room.chessBoard[to.row][to.col];
+        room.chessBoard[to.row][to.col] = movingPiece;
+        room.chessBoard[from.row][from.col] = '';
+
+        const isOpponentKing = targetPiece === 'bk' || targetPiece === 'wk';
+        const opponentColor = room.currentTurn === 'white' ? 'black' : 'white';
+
+        if (isOpponentKing) {
+          room.state = 'finished';
+          room.winnerColor = room.currentTurn;
+        } else if (isCheckmate(room.chessBoard, opponentColor)) {
+          room.state = 'finished';
+          room.winnerColor = room.currentTurn;
+          io.to(room.id).emit('gameMessage', { system: true, text: `Мат! Победил ${room.currentTurn === 'white' ? 'Белый' : 'Чёрный'}!` });
+        } else if (isKingInCheck(room.chessBoard, opponentColor)) {
+          io.to(room.id).emit('gameMessage', { system: true, text: `Шах ${opponentColor === 'white' ? 'белому' : 'чёрному'} королю!` });
+        }
+
+        room.currentTurn = room.currentTurn === 'white' ? 'black' : 'white';
+        await roomManager.updateRoom(roomId, room);
+
+        io.to(room.id).emit('chessBoardUpdate', {
+          chessBoard: room.chessBoard,
+          currentTurn: room.currentTurn,
+          winnerColor: room.winnerColor || null
+        });
+      } catch (error) {
+        console.error('Error moving chess piece:', error);
+        socket.emit('error', 'Не удалось выполнить ход');
       }
     });
 

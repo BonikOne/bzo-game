@@ -40,6 +40,7 @@ const currentUserLabel = document.getElementById('currentUserLabel');
 const spyCard = document.getElementById('spy-card');
 const codenamesCard = document.getElementById('codenames-card');
 const imaginariumCard = document.getElementById('imaginarium-card');
+const chessCard = document.getElementById('chess-card');
 const backToMenu = document.getElementById('backToMenu');
 const backToChooseFromRooms = document.getElementById('backToChooseFromRooms');
 const backToRooms = document.getElementById('backToRooms');
@@ -115,6 +116,11 @@ let currentHint = null;
 let currentPhaseTimer = 60;
 let playerSelections = {};
 
+let currentChessBoard = [];
+let currentChessColor = null;
+let currentChessTurn = 'white';
+let selectedChessSource = null;
+
 let currentImaginariumHand = [];
 let currentImaginariumPhase = null;
 let currentAssociation = null;
@@ -169,7 +175,16 @@ function getGameDisplayName(gameType) {
   if (gameType === 'spy') return 'Шпион';
   if (gameType === 'codenames') return 'Код Неймс';
   if (gameType === 'imaginarium') return 'Имаджинариум';
+  if (gameType === 'chess') return 'Шахматы';
   return 'Игра';
+}
+
+function getChessPieceSymbol(piece) {
+  const map = {
+    wp: '♙', wr: '♖', wn: '♘', wb: '♗', wq: '♕', wk: '♔',
+    bp: '♟', br: '♜', bn: '♞', bb: '♝', bq: '♛', bk: '♚'
+  };
+  return map[piece] || '';
 }
 
 let socket = null;
@@ -201,9 +216,11 @@ function selectGame(gameType) {
   spyCard.classList.toggle('active', gameType === 'spy');
   codenamesCard.classList.toggle('active', gameType === 'codenames');
   imaginariumCard.classList.toggle('active', gameType === 'imaginarium');
+  chessCard.classList.toggle('active', gameType === 'chess');
   document.body.classList.toggle('spy-theme', gameType === 'spy');
   document.body.classList.toggle('codenames-theme', gameType === 'codenames');
   document.body.classList.toggle('imaginarium-theme', gameType === 'imaginarium');
+  document.body.classList.toggle('chess-theme', gameType === 'chess');
   showScreen(roomListScreen);
   connectSocket();
 }
@@ -345,7 +362,7 @@ function connectSocket() {
     renderRoomActions(room);
     renderChat(room.chat);
   });
-  socket.on('gameStarted', ({ gameType, isSpy, location, players, availableLocations, words, currentTeam: team, isCaptain, playerTeam, teamCaptains, keyMap, revealed, teams, phase, hint, phaseTimer, hand, leaderId, association, tableCards, scores, round, isLeader }) => {
+  socket.on('gameStarted', ({ gameType, isSpy, location, players, availableLocations, words, currentTeam: team, isCaptain, playerTeam, teamCaptains, keyMap, revealed, teams, phase, hint, phaseTimer, hand, leaderId, association, tableCards, scores, round, isLeader, playerColor, currentTurn, chessBoard }) => {
     currentGame = gameType || 'spy';
     if (currentGame === 'codenames') {
       currentPlayers = players;
@@ -372,6 +389,14 @@ function connectSocket() {
       currentRound = round || 1;
       currentPhaseTimer = phaseTimer || 0;
       currentRole = isLeader ? 'leader' : 'player';
+      currentLocation = null;
+      currentLocations = [];
+    } else if (currentGame === 'chess') {
+      currentPlayers = players;
+      currentChessBoard = chessBoard || [];
+      currentChessColor = playerColor || null;
+      currentChessTurn = currentTurn || 'white';
+      selectedChessSource = null;
       currentLocation = null;
       currentLocations = [];
     } else {
@@ -415,6 +440,21 @@ function connectSocket() {
   });
   socket.on('phaseTimerUpdate', (time) => {
     currentPhaseTimer = time;
+    renderGameTable(currentPlayers, false, null);
+  });
+  socket.on('chessBoardUpdate', ({ chessBoard, currentTurn, lastMove, winnerColor }) => {
+    currentChessBoard = chessBoard || currentChessBoard;
+    currentChessTurn = currentTurn || currentChessTurn;
+    if (lastMove) {
+      showMessage(`Ход ${lastMove.playerColor}: ${lastMove.from} → ${lastMove.to}`);
+    }
+    if (winnerColor) {
+      showMessage(`Победил ${winnerColor === 'white' ? 'Белый' : 'Чёрный'}!`);
+      setTimeout(() => {
+        showScreen(lobbyScreen);
+        if (socket) socket.emit('requestRooms');
+      }, 3000);
+    }
     renderGameTable(currentPlayers, false, null);
   });
   socket.on('imaginariumPhaseChanged', ({ phase, association, phaseTimer, leaderId, round }) => {
@@ -526,7 +566,7 @@ function renderPlayers(players = [], creatorId, state) {
 
 function renderRoomActions(room) {
   const isCreator = socket?.id === room.creatorId;
-  const minPlayers = room.gameType === 'imaginarium' ? 3 : 4;
+  const minPlayers = room.gameType === 'imaginarium' ? 3 : room.gameType === 'chess' ? 2 : 4;
   const canStart = room.state === 'waiting' && room.players.length >= minPlayers && isCreator;
   const actionHtml = canStart ? '<button id="startGame" class="primary">Начать игру</button>' : '';
   roomActions.innerHTML = actionHtml;
@@ -560,6 +600,8 @@ function appendTableChatMessage(message) {
 }
 
 function renderGameTable(players, isSpy, location) {
+  cardsGrid.classList.remove('chess-board');
+
   if (currentGame === 'imaginarium') {
     tableTitle.textContent = 'Имаджинариум';
     const leader = currentPlayers.find((p) => p.id === currentLeaderId);
@@ -714,6 +756,88 @@ function renderGameTable(players, isSpy, location) {
     passTurnBtn?.addEventListener('click', () => {
       socket.emit('passTurn');
     });
+  } else if (currentGame === 'chess') {
+    tableTitle.textContent = 'Шахматы';
+    cardsGrid.classList.add('chess-board');
+    const board = currentChessBoard.length ? currentChessBoard : [
+      ['br','bn','bb','bq','bk','bb','bn','br'],
+      ['bp','bp','bp','bp','bp','bp','bp','bp'],
+      ['','','','','','','',''],
+      ['','','','','','','',''],
+      ['','','','','','','',''],
+      ['','','','','','','',''],
+      ['wp','wp','wp','wp','wp','wp','wp','wp'],
+      ['wr','wn','wb','wq','wk','wb','wn','wr']
+    ];
+    const isMyTurn = currentChessColor === currentChessTurn;
+    const selected = selectedChessSource;
+    const columns = ['A','B','C','D','E','F','G','H'];
+
+    cardsGrid.innerHTML = `
+      <div class="chess-label corner-label"></div>
+      ${columns.map((col) => `<div class="chess-label top-label">${col}</div>`).join('')}
+      ${board.map((row, rowIndex) => `
+        <div class="chess-label left-label">${8 - rowIndex}</div>
+        ${row.map((cell, colIndex) => {
+          const isWhiteSquare = (rowIndex + colIndex) % 2 === 0;
+          const isSelected = selected && selected.row === rowIndex && selected.col === colIndex;
+          return `<div class="chess-square ${isWhiteSquare ? 'white' : 'black'}${isSelected ? ' selected' : ''}" data-row="${rowIndex}" data-col="${colIndex}">
+            <span class="chess-piece ${cell.startsWith('w') ? 'white-piece' : cell.startsWith('b') ? 'black-piece' : ''}">${getChessPieceSymbol(cell)}</span>
+          </div>`;
+        }).join('')}
+      `).join('')}
+    `;
+
+    cardsGrid.querySelectorAll('.chess-square').forEach((square) => {
+      square.addEventListener('click', () => {
+        const row = Number(square.dataset.row);
+        const col = Number(square.dataset.col);
+        const piece = board[row][col] || '';
+        const pieceColor = piece.startsWith('w') ? 'white' : piece.startsWith('b') ? 'black' : null;
+
+        if (!selected) {
+          if (!pieceColor || pieceColor !== currentChessColor) return;
+          selectedChessSource = { row, col };
+          renderGameTable(currentPlayers, false, null);
+          return;
+        }
+
+        if (selected.row === row && selected.col === col) {
+          selectedChessSource = null;
+          renderGameTable(currentPlayers, false, null);
+          return;
+        }
+
+        if (!isMyTurn) {
+          showMessage('Сейчас ходит другой игрок.');
+          return;
+        }
+
+        socket.emit('moveChessPiece', {
+          from: selected,
+          to: { row, col }
+        });
+        selectedChessSource = null;
+      });
+    });
+
+    const currentSide = currentChessTurn === 'white' ? 'Белые' : 'Чёрные';
+    const roleText = currentChessColor
+      ? `Вы играете за ${currentChessColor === 'white' ? 'Белых' : 'Чёрных'}`
+      : 'Ожидайте соперника';
+    playerRole.innerHTML = `
+      <div class="chess-info">
+        <h3>${roleText}</h3>
+        <p>Сейчас ход: ${currentSide}</p>
+        <p>${isMyTurn ? 'Ваш ход. Выберите фигуру, затем клетку.' : 'Ожидайте хода соперника.'}</p>
+      </div>
+    `;
+
+    playersOnTable.innerHTML = `<h3>Игроки</h3><ul>${currentPlayers.map((p) => {
+      const color = p.id === socket?.id ? currentChessColor : (currentChessColor === 'white' ? 'black' : 'white');
+      return `<li>${p.nickname}${p.id === socket?.id ? ' (вы)' : ''} — ${color === 'white' ? 'Белые' : 'Чёрные'}</li>`;
+    }).join('')}</ul>`;
+    return;
   } else {
     tableTitle.textContent = 'Шпион';
     const locationsToShow = currentLocations.length ? currentLocations : ALL_LOCATIONS;
@@ -848,6 +972,10 @@ window.addEventListener('load', () => {
 
   imaginariumCard.addEventListener('click', () => {
     selectGame('imaginarium');
+  });
+
+  chessCard?.addEventListener('click', () => {
+    selectGame('chess');
   });
 
   backToMenu.addEventListener('click', () => {

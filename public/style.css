@@ -1031,10 +1031,82 @@ input[type='password'] {
   box-shadow: 0 45px 120px rgba(0, 0, 0, 0.45);
 }
 
-.game-card::before {
-  content: '';
-  position: absolute;
-  inset: 0;
+  .chess-card .chess-image {
+    background: linear-gradient(135deg, rgba(255,255,255,0.08) 25%, rgba(15,20,35,0.95) 25%, rgba(15,20,35,0.95) 50%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.08) 75%, rgba(15,20,35,0.95) 75%);
+    background-size: 40px 40px;
+  }
+
+  .chess-board {
+    display: grid;
+    grid-template-columns: 32px repeat(8, minmax(40px, 1fr));
+    grid-template-rows: 32px repeat(8, minmax(40px, 1fr));
+    gap: 1px;
+    padding: 6px;
+    width: min(360px, 100%);
+    max-width: 360px;
+    background: rgba(255,255,255,0.08);
+    border-radius: 18px;
+    margin: 0 auto;
+  }
+
+  .chess-label {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: rgba(255,255,255,0.75);
+    font-size: 0.85rem;
+    font-weight: 700;
+    user-select: none;
+  }
+
+  .top-label {
+    border-bottom: 1px solid rgba(255,255,255,0.12);
+  }
+
+  .left-label {
+    border-right: 1px solid rgba(255,255,255,0.12);
+  }
+
+  .corner-label {
+    background: transparent;
+  }
+
+  .chess-square {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2rem;
+    font-weight: 900;
+    border-radius: 8px;
+    cursor: pointer;
+    user-select: none;
+    transition: transform 0.12s ease, box-shadow 0.12s ease;
+  }
+
+  .chess-square.white {
+    background: rgba(255, 255, 255, 0.12);
+    color: #111;
+  }
+
+  .chess-square.black {
+    background: rgba(0, 0, 0, 0.32);
+    color: #fff;
+  }
+
+  .chess-square.selected {
+    outline: 3px solid rgba(251, 191, 36, 0.9);
+    outline-offset: -3px;
+  }
+
+  .chess-info {
+    margin-top: 18px;
+    padding: 18px;
+    border-radius: 22px;
+    background: linear-gradient(135deg, rgba(10, 14, 24, 0.96), rgba(18, 24, 39, 0.96));
+    border: 1px solid rgba(255, 255, 255, 0.12);
+  }
   background:
     radial-gradient(circle at 20% 20%, rgba(96, 165, 250, 0.16), transparent 30%),
     radial-gradient(circle at 80% 75%, rgba(251, 191, 36, 0.14), transparent 25%);
@@ -1589,6 +1661,88 @@ body.imaginarium-theme {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
+}
+
+.cards-grid.chess-board {
+  display: grid !important;
+  grid-template-columns: 40px repeat(8, minmax(60px, 1fr)) !important;
+  grid-template-rows: 40px repeat(8, minmax(60px, 1fr)) !important;
+  gap: 2px !important;
+  flex: none !important;
+  overflow: visible !important;
+  width: min(520px, 100%) !important;
+  max-width: 520px !important;
+  margin: 0 auto;
+  padding: 8px !important;
+  border-radius: 18px;
+}
+
+.chess-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255,255,255,0.85);
+  font-size: 0.82rem;
+  font-weight: 700;
+  user-select: none;
+}
+
+.chess-label.top-label {
+  border-bottom: 1px solid rgba(255,255,255,0.12);
+}
+
+.chess-label.left-label {
+  border-right: 1px solid rgba(255,255,255,0.12);
+}
+
+.chess-label.corner-label {
+  background: transparent;
+}
+
+.chess-square {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+  font-weight: 900;
+  border-radius: 8px;
+  cursor: pointer;
+  user-select: none;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.chess-square.white {
+}
+
+.chess-square.black {
+}
+
+.chess-square.selected {
+  outline: 3px solid rgba(251, 191, 36, 0.9);
+  outline-offset: -3px;
+}
+
+.chess-piece.white-piece {
+  color: #ffffff;
+}
+
+.chess-piece.black-piece {
+  color: #000000;
+}
+
+.chess-info {
+  margin-top: 18px;
+  padding: 18px;
+  border-radius: 22px;
+  background: linear-gradient(135deg, rgba(10, 14, 24, 0.96), rgba(18, 24, 39, 0.96));
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+  background:
+    radial-gradient(circle at 20% 20%, rgba(96, 165, 250, 0.16), transparent 30%),
+    radial-gradient(circle at 80% 75%, rgba(251, 191, 36, 0.14), transparent 25%);
+  pointer-events: none;
 }
 
 .location-card {
