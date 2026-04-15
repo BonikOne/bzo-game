@@ -772,11 +772,14 @@ function renderGameTable(players, isSpy, location) {
     const isMyTurn = currentChessColor === currentChessTurn;
     const selected = selectedChessSource;
     const columns = ['A','B','C','D','E','F','G','H'];
+    const isBlack = currentChessColor === 'black';
+    const displayBoard = isBlack ? board.map(row => row.slice().reverse()).reverse() : board;
+    const displayColumns = isBlack ? columns.slice().reverse() : columns;
 
     cardsGrid.innerHTML = `
       <div class="chess-label corner-label"></div>
-      ${columns.map((col) => `<div class="chess-label top-label">${col}</div>`).join('')}
-      ${board.map((row, rowIndex) => `
+      ${displayColumns.map((col) => `<div class="chess-label top-label">${col}</div>`).join('')}
+      ${displayBoard.map((row, rowIndex) => `
         <div class="chess-label left-label">${8 - rowIndex}</div>
         ${row.map((cell, colIndex) => {
           const isWhiteSquare = (rowIndex + colIndex) % 2 === 0;
@@ -790,19 +793,21 @@ function renderGameTable(players, isSpy, location) {
 
     cardsGrid.querySelectorAll('.chess-square').forEach((square) => {
       square.addEventListener('click', () => {
-        const row = Number(square.dataset.row);
-        const col = Number(square.dataset.col);
-        const piece = board[row][col] || '';
+        const displayRow = Number(square.dataset.row);
+        const displayCol = Number(square.dataset.col);
+        const originalRow = isBlack ? 7 - displayRow : displayRow;
+        const originalCol = isBlack ? 7 - displayCol : displayCol;
+        const piece = board[originalRow][originalCol] || '';
         const pieceColor = piece.startsWith('w') ? 'white' : piece.startsWith('b') ? 'black' : null;
 
         if (!selected) {
           if (!pieceColor || pieceColor !== currentChessColor) return;
-          selectedChessSource = { row, col };
+          selectedChessSource = { row: displayRow, col: displayCol };
           renderGameTable(currentPlayers, false, null);
           return;
         }
 
-        if (selected.row === row && selected.col === col) {
+        if (selected.row === displayRow && selected.col === displayCol) {
           selectedChessSource = null;
           renderGameTable(currentPlayers, false, null);
           return;
@@ -814,8 +819,8 @@ function renderGameTable(players, isSpy, location) {
         }
 
         socket.emit('moveChessPiece', {
-          from: selected,
-          to: { row, col }
+          from: { row: isBlack ? 7 - selected.row : selected.row, col: isBlack ? 7 - selected.col : selected.col },
+          to: { row: originalRow, col: originalCol }
         });
         selectedChessSource = null;
       });
