@@ -42,6 +42,7 @@ const codenamesCard = document.getElementById('codenames-card');
 const imaginariumCard = document.getElementById('imaginarium-card');
 const chessCard = document.getElementById('chess-card');
 const pairsCard = document.getElementById('pairs-card');
+const durakCard = document.getElementById('durak-card');
 const backToMenu = document.getElementById('backToMenu');
 const backToChooseFromRooms = document.getElementById('backToChooseFromRooms');
 const backToRooms = document.getElementById('backToRooms');
@@ -128,6 +129,15 @@ let currentPairsScores = { player1: 0, player2: 0 };
 let flippedCards = [];
 let canFlip = true;
 
+let currentDurakHand = [];
+let currentDurakTrumpSuit = 'H';
+let currentDurakTurn = null;
+let currentDurakAttackerId = null;
+let currentDurakDefenderId = null;
+let currentDurakAwaitingDefense = false;
+let currentDurakTableCards = [];
+let currentDurakDeckCount = 0;
+
 let currentImaginariumHand = [];
 let currentImaginariumPhase = null;
 let currentAssociation = null;
@@ -184,7 +194,18 @@ function getGameDisplayName(gameType) {
   if (gameType === 'imaginarium') return 'Имаджинариум';
   if (gameType === 'chess') return 'Шахматы';
   if (gameType === 'pairs') return 'Найди пару';
+  if (gameType === 'durak') return 'Дурак';
   return 'Игра';
+}
+
+function getSuitName(suit) {
+  const suitNames = {
+    'D': 'Буби',
+    'H': 'Червы',
+    'S': 'Пики',
+    'C': 'Трефы'
+  };
+  return suitNames[suit] || suit;
 }
 
 function getChessPieceSymbol(piece) {
@@ -226,6 +247,7 @@ function selectGame(gameType) {
   imaginariumCard.classList.toggle('active', gameType === 'imaginarium');
   chessCard.classList.toggle('active', gameType === 'chess');
   pairsCard.classList.toggle('active', gameType === 'pairs');
+  durakCard.classList.toggle('active', gameType === 'durak');
   document.body.classList.toggle('spy-theme', gameType === 'spy');
   document.body.classList.toggle('codenames-theme', gameType === 'codenames');
   document.body.classList.toggle('imaginarium-theme', gameType === 'imaginarium');
@@ -371,7 +393,7 @@ function connectSocket() {
     renderRoomActions(room);
     renderChat(room.chat);
   });
-  socket.on('gameStarted', ({ gameType, isSpy, location, players, availableLocations, words, currentTeam: team, isCaptain, playerTeam, teamCaptains, keyMap, revealed, teams, phase, hint, phaseTimer, hand, leaderId, association, tableCards, scores, round, isLeader, playerColor, currentTurn, chessBoard, pairsBoard }) => {
+  socket.on('gameStarted', ({ gameType, isSpy, location, players, availableLocations, words, currentTeam: team, isCaptain, playerTeam, teamCaptains, keyMap, revealed, teams, phase, hint, phaseTimer, hand, leaderId, association, tableCards, scores, round, isLeader, playerColor, currentTurn, chessBoard, pairsBoard, trumpSuit, deckCount, attackerId, defenderId, isAwaitingDefense }) => {
     currentGame = gameType || 'spy';
     if (currentGame === 'codenames') {
       currentPlayers = players;
@@ -415,6 +437,18 @@ function connectSocket() {
       currentPairsScores = scores || {};
       flippedCards = [];
       canFlip = true;
+      currentLocation = null;
+      currentLocations = [];
+    } else if (currentGame === 'durak') {
+      currentPlayers = players;
+      currentDurakHand = hand || [];
+      currentDurakTrumpSuit = trumpSuit || 'H';
+      currentDurakTurn = currentTurn || null;
+      currentDurakAttackerId = attackerId || null;
+      currentDurakDefenderId = defenderId || null;
+      currentDurakAwaitingDefense = typeof isAwaitingDefense === 'boolean' ? isAwaitingDefense : false;
+      currentDurakTableCards = tableCards || [];
+      currentDurakDeckCount = deckCount || 0;
       currentLocation = null;
       currentLocations = [];
     } else {
@@ -488,6 +522,17 @@ function connectSocket() {
         if (socket) socket.emit('requestRooms');
       }, 3000);
     }
+    renderGameTable(currentPlayers, false, null);
+  });
+  socket.on('durakUpdate', ({ hand, tableCards, currentTurn, deckCount, trumpSuit, attackerId, defenderId, isAwaitingDefense }) => {
+    currentDurakHand = hand || currentDurakHand;
+    currentDurakTableCards = tableCards || currentDurakTableCards;
+    currentDurakTurn = currentTurn || currentDurakTurn;
+    currentDurakDeckCount = deckCount || currentDurakDeckCount;
+    currentDurakTrumpSuit = trumpSuit || currentDurakTrumpSuit;
+    currentDurakAttackerId = attackerId || currentDurakAttackerId;
+    currentDurakDefenderId = defenderId || currentDurakDefenderId;
+    currentDurakAwaitingDefense = typeof isAwaitingDefense === 'boolean' ? isAwaitingDefense : currentDurakAwaitingDefense;
     renderGameTable(currentPlayers, false, null);
   });
   socket.on('imaginariumPhaseChanged', ({ phase, association, phaseTimer, leaderId, round }) => {
@@ -599,7 +644,7 @@ function renderPlayers(players = [], creatorId, state) {
 
 function renderRoomActions(room) {
   const isCreator = socket?.id === room.creatorId;
-  const minPlayers = room.gameType === 'imaginarium' ? 3 : room.gameType === 'chess' ? 2 : room.gameType === 'pairs' ? 2 : 4;
+  const minPlayers = room.gameType === 'imaginarium' ? 3 : room.gameType === 'chess' || room.gameType === 'pairs' || room.gameType === 'durak' ? 2 : 4;
   const canStart = room.state === 'waiting' && room.players.length >= minPlayers && isCreator;
   const actionHtml = canStart ? '<button id="startGame" class="primary">Начать игру</button>' : '';
   roomActions.innerHTML = actionHtml;
@@ -918,6 +963,94 @@ function renderGameTable(players, isSpy, location) {
       return `<li>${p.nickname}${p.id === socket?.id ? ' (вы)' : ''} — ${score} пар</li>`;
     }).join('')}</ul>`;
     return;
+  } else if (currentGame === 'durak') {
+    tableTitle.textContent = 'Дурак';
+    cardsGrid.classList.add('durak-board');
+    const isMyTurn = currentDurakTurn === socket?.id;
+    const currentPlayer = currentPlayers.find(p => p.id === currentDurakTurn);
+    const isAttacker = socket?.id === currentDurakAttackerId;
+    const isDefender = socket?.id === currentDurakDefenderId;
+
+    // Render player's hand
+    const handHtml = currentDurakHand.map((card, index) => `
+      <div class="durak-card" data-card-id="${card.id}" data-index="${index}">
+        <img src="durak-cards/${card.id}.png" alt="${card.rank} ${card.suit}" class="card-image">
+      </div>
+    `).join('');
+
+    // Render table cards
+    const tableHtml = currentDurakTableCards.map((card, index) => `
+      <div class="durak-table-card" data-index="${index}">
+        <img src="durak-cards/${card.id}.png" alt="${card.rank} ${card.suit}" class="card-image">
+      </div>
+    `).join('');
+
+    const showAttackButton = isMyTurn && isAttacker && !currentDurakAwaitingDefense;
+    const showDefendTakeButtons = isMyTurn && isDefender && currentDurakAwaitingDefense;
+    const showPassButton = isMyTurn && isAttacker && !currentDurakAwaitingDefense && currentDurakTableCards.length > 0;
+
+    cardsGrid.innerHTML = `
+      <div class="durak-game">
+        <div class="durak-hand">
+          <h4>Ваши карты</h4>
+          <div class="durak-cards-container">${handHtml}</div>
+        </div>
+        <div class="durak-table">
+          <h4>Стол</h4>
+          <div class="durak-table-container">${tableHtml}</div>
+          <div class="durak-deck-info">
+            <p>Карт в колоде: ${currentDurakDeckCount}</p>
+            <p>Козырь: ${getSuitName(currentDurakTrumpSuit)}</p>
+            <p>Роль: ${isAttacker ? 'Атакующий' : isDefender ? 'Защитник' : 'Ожидайте'}</p>
+            <p>${currentDurakAwaitingDefense ? 'Ожидание защиты' : 'Ход открытия'}</p>
+          </div>
+        </div>
+        <div class="durak-actions">
+          ${showAttackButton ? '<button class="btn primary durak-attack-btn">Атаковать</button>' : ''}
+          ${showDefendTakeButtons ? '<button class="btn secondary durak-defend-btn">Защититься</button><button class="btn danger durak-take-btn">Взять</button>' : ''}
+          ${showPassButton ? '<button class="btn success durak-pass-btn">Бито</button>' : ''}
+        </div>
+      </div>
+    `;
+
+    // Add click handlers for cards
+    cardsGrid.querySelectorAll('.durak-card').forEach((cardElement) => {
+      cardElement.addEventListener('click', () => {
+        if (!isMyTurn) return;
+        const cardId = cardElement.dataset.cardId;
+        if (isDefender && currentDurakAwaitingDefense) {
+          socket.emit('playDurakCard', { cardId, action: 'defend' });
+        } else if (isAttacker && !currentDurakAwaitingDefense) {
+          socket.emit('playDurakCard', { cardId, action: 'attack' });
+        }
+      });
+    });
+
+    const takeBtn = cardsGrid.querySelector('.durak-take-btn');
+    if (takeBtn) {
+      takeBtn.addEventListener('click', () => {
+        socket.emit('playDurakCard', { action: 'take' });
+      });
+    }
+
+    const passBtn = cardsGrid.querySelector('.durak-pass-btn');
+    if (passBtn) {
+      passBtn.addEventListener('click', () => {
+        socket.emit('playDurakCard', { action: 'pass' });
+      });
+    }
+
+    playerRole.innerHTML = `
+      <div class="durak-info">
+        <h3>${isMyTurn ? 'Ваш ход' : `Ход: ${currentPlayer?.nickname || 'игрок'}`}</h3>
+        <p>Карт в руке: ${currentDurakHand.length}</p>
+      </div>
+    `;
+
+    playersOnTable.innerHTML = `<h3>Игроки</h3><ul>${currentPlayers.map((p) => {
+      return `<li>${p.nickname}${p.id === socket?.id ? ' (вы)' : ''} — ${p.id === socket?.id ? currentDurakHand.length : '?'} карт</li>`;
+    }).join('')}</ul>`;
+    return;
   } else {
     tableTitle.textContent = 'Шпион';
     const locationsToShow = currentLocations.length ? currentLocations : ALL_LOCATIONS;
@@ -1060,6 +1193,10 @@ window.addEventListener('load', () => {
 
   pairsCard?.addEventListener('click', () => {
     selectGame('pairs');
+  });
+
+  durakCard?.addEventListener('click', () => {
+    selectGame('durak');
   });
 
   backToMenu.addEventListener('click', () => {

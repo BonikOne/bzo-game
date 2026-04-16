@@ -24,6 +24,52 @@ function createImaginariumDeck() {
   return Array.from({ length: 85 }, (_, i) => `Карта ${i + 1}`);
 }
 
+function createDurakDeck() {
+  const ranks = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]; // 11=J, 12=Q, 13=K, 14=A
+  const suits = ['D', 'H', 'S', 'C']; // D=буби, H=червы, S=пики, C=трефы
+  const deck = [];
+  
+  for (const suit of suits) {
+    for (const rank of ranks) {
+      deck.push({ rank, suit, id: `${rank}${suit}` });
+    }
+  }
+  
+  const shuffledDeck = shuffle(deck);
+  const trumpSuit = shuffledDeck[shuffledDeck.length - 1].suit; // Last card determines trump
+  
+  return { deck: shuffledDeck, trumpSuit };
+}
+
+function dealDurakCards(deck, playerCount) {
+  const hands = Array.from({ length: playerCount }, () => []);
+  const cardsPerPlayer = 6;
+  
+  for (let i = 0; i < cardsPerPlayer; i++) {
+    for (let j = 0; j < playerCount; j++) {
+      if (deck.length > 0) {
+        hands[j].push(deck.pop());
+      }
+    }
+  }
+  
+  return hands;
+}
+
+function canBeatCard(defenseCard, attackCard, trumpSuit) {
+  // Same suit: higher rank beats lower
+  if (defenseCard.suit === attackCard.suit) {
+    return defenseCard.rank > attackCard.rank;
+  }
+  
+  // Different suits: only trump beats non-trump
+  if (defenseCard.suit === trumpSuit && attackCard.suit !== trumpSuit) {
+    return true;
+  }
+  
+  return false;
+}
+
 function isValidChessMove(board, from, to, playerColor) {
   if (!from || !to) return false;
   const fromPiece = board[from.row]?.[from.col] || '';
@@ -384,7 +430,7 @@ function setupGameHandlers(io) {
           return;
         }
 
-        const requiredPlayers = room.gameType === 'imaginarium' ? 3 : room.gameType === 'chess' || room.gameType === 'pairs' ? 2 : 4;
+        const requiredPlayers = room.gameType === 'imaginarium' ? 3 : room.gameType === 'chess' || room.gameType === 'pairs' || room.gameType === 'durak' ? 2 : 4;
         if (room.players.length < requiredPlayers) {
           socket.emit('error', `Нужно минимум ${requiredPlayers} игрок${requiredPlayers === 2 ? 'а' : 'ов'} для начала игры.`);
           return;
@@ -526,6 +572,40 @@ function setupGameHandlers(io) {
               pairsBoard: room.pairsBoard,
               currentTurn: room.currentTurn,
               scores: room.pairsScores
+            });
+          });
+        } else if (room.gameType === 'durak') {
+          // Initialize Durak game
+          const { deck, trumpSuit } = createDurakDeck();
+          const hands = dealDurakCards(deck, room.players.length);
+          
+          room.durakDeck = deck;
+          room.trumpSuit = trumpSuit;
+          room.playerHands = {};
+          room.attackerId = room.players[0]?.id;
+          room.defenderId = room.players[1]?.id;
+          room.currentTurn = room.attackerId;
+          room.isAwaitingDefense = false;
+          room.tableCards = [];
+          room.attackCards = [];
+          room.defenseCards = [];
+          
+          room.players.forEach((player, index) => {
+            room.playerHands[player.id] = hands[index];
+          });
+
+          room.players.forEach((player) => {
+            io.to(player.id).emit('gameStarted', {
+              gameType: 'durak',
+              players: room.players.map((p) => ({ id: p.id, nickname: p.nickname })),
+              hand: room.playerHands[player.id],
+              trumpSuit: room.trumpSuit,
+              currentTurn: room.currentTurn,
+              attackerId: room.attackerId,
+              defenderId: room.defenderId,
+              isAwaitingDefense: room.isAwaitingDefense,
+              tableCards: room.tableCards,
+              deckCount: room.durakDeck.length
             });
           });
         } else {
@@ -705,6 +785,141 @@ function setupGameHandlers(io) {
       } catch (error) {
         console.error('Error flipping card:', error);
         socket.emit('error', 'Не удалось перевернуть карточку');
+      }
+    });
+
+    socket.on('playDurakCard', async ({ cardId, action }) => {
+      try {
+        const room = await getValidatedRoom(socket, 'durak');
+        if (!room || room.currentTurn !== socket.id) return;
+
+        const playerHand = room.playerHands[socket.id];
+        const opponentId = room.players.find(p => p.id !== socket.id)?.id;
+        const opponentHand = room.playerHands[opponentId];
+
+        if (action === 'attack') {
+          const attackerId = room.attackerId;
+          if (socket.id !== attackerId || room.isAwaitingDefense) return;
+          
+          // Player attacks with a card
+          const cardIndex = playerHand.findIndex(card => card.id === cardId);
+          if (cardIndex === -1) return;
+
+          const card = playerHand.splice(cardIndex, 1)[0];
+          
+          // Check if this is a follow-up attack (подкидывание) vs initial attack
+          if (room.attackCards.length > 0) {
+            // Follow-up attack: card rank must exist on table
+            const tableRanks = room.tableCards.map(c => c.rank);
+            if (!tableRanks.includes(card.rank)) {
+              socket.emit('error', 'Можно подкинуть только карту того ранга, который уже на столе');
+              playerHand.push(card); // Return card to hand
+              return;
+            }
+          }
+          
+          room.tableCards.push(card);
+          room.attackCards.push(card);
+          room.isAwaitingDefense = true;
+          
+          // Switch turn to defender
+          room.currentTurn = room.defenderId;
+        } else if (action === 'defend') {
+          // Defender defends against attack
+          const defenderId = room.defenderId;
+          if (socket.id !== defenderId || !room.isAwaitingDefense) return;
+          if (room.attackCards.length === 0) return;
+          
+          const cardIndex = playerHand.findIndex(card => card.id === cardId);
+          if (cardIndex === -1) return;
+
+          const defenseCard = playerHand.splice(cardIndex, 1)[0];
+          const attackCard = room.attackCards[room.attackCards.length - 1];
+          
+          if (!canBeatCard(defenseCard, attackCard, room.trumpSuit)) {
+            socket.emit('error', 'Эта карта не может побить атакующую карту');
+            playerHand.push(defenseCard); // Return card to hand
+            return;
+          }
+          
+          room.defenseCards.push(defenseCard);
+          room.tableCards.push(defenseCard);
+          room.isAwaitingDefense = false;
+          
+          // Attacker can now add more cards or say Bito
+          room.currentTurn = room.attackerId;
+        } else if (action === 'take') {
+          // Defender takes all cards from table
+          const defenderId = room.defenderId;
+          if (socket.id !== defenderId || !room.isAwaitingDefense) return;
+
+          room.tableCards.forEach(card => playerHand.push(card));
+          room.tableCards = [];
+          room.attackCards = [];
+          room.defenseCards = [];
+          room.isAwaitingDefense = false;
+          
+          // Draw cards after take
+          while (playerHand.length < 6 && room.durakDeck.length > 0) {
+            playerHand.push(room.durakDeck.pop());
+          }
+          while (opponentHand.length < 6 && room.durakDeck.length > 0) {
+            opponentHand.push(room.durakDeck.pop());
+          }
+          
+          // Swap attacker and defender roles
+          const previousAttacker = room.attackerId;
+          room.attackerId = room.defenderId;
+          room.defenderId = previousAttacker;
+          room.currentTurn = room.attackerId;
+        } else if (action === 'pass') {
+          // Attacker finishes the round after successful defense
+          const attackerId = room.attackerId;
+          if (socket.id !== attackerId || room.isAwaitingDefense) return;
+
+          room.tableCards = [];
+          room.attackCards = [];
+          room.defenseCards = [];
+          
+          // Draw cards after bito
+          while (playerHand.length < 6 && room.durakDeck.length > 0) {
+            playerHand.push(room.durakDeck.pop());
+          }
+          while (opponentHand.length < 6 && room.durakDeck.length > 0) {
+            opponentHand.push(room.durakDeck.pop());
+          }
+          
+          // Swap attacker and defender roles
+          const previousAttacker = room.attackerId;
+          room.attackerId = room.defenderId;
+          room.defenderId = previousAttacker;
+          room.currentTurn = room.attackerId;
+        }
+
+        // Check if player has no cards left
+        if (playerHand.length === 0 && room.durakDeck.length === 0) {
+          room.state = 'finished';
+          const winner = room.players.find(p => p.id === socket.id);
+          io.to(room.id).emit('gameMessage', { system: true, text: `${winner.nickname} победил!` });
+        }
+
+        await roomManager.updateRoom(room.id, room);
+
+        room.players.forEach((player) => {
+          io.to(player.id).emit('durakUpdate', {
+            hand: room.playerHands[player.id],
+            tableCards: room.tableCards,
+            currentTurn: room.currentTurn,
+            deckCount: room.durakDeck.length,
+            trumpSuit: room.trumpSuit,
+            attackerId: room.attackerId,
+            defenderId: room.defenderId,
+            isAwaitingDefense: room.isAwaitingDefense
+          });
+        });
+      } catch (error) {
+        console.error('Error playing durak card:', error);
+        socket.emit('error', 'Не удалось сыграть карту');
       }
     });
 
