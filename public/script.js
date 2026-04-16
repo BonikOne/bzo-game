@@ -377,7 +377,7 @@ function connectSocket() {
   socket.on('connect', () => {
     console.log('Socket.IO connected');
     socketErrorLogged = false;
-    socket.emit('requestRooms');
+    socket.emit('requestRooms', { gameType: currentGame });
   });
   socket.on('connect_error', (error) => {
     if (!socketErrorLogged) {
@@ -533,7 +533,7 @@ function connectSocket() {
       showMessage(`Победил ${winnerColor === 'white' ? 'Белый' : 'Чёрный'}!`);
       setTimeout(() => {
         showScreen(lobbyScreen);
-        if (socket) socket.emit('requestRooms');
+        if (socket) socket.emit('requestRooms', { gameType: currentGame });
       }, 3000);
     }
     renderGameTable(currentPlayers, false, null);
@@ -548,7 +548,7 @@ function connectSocket() {
       showMessage(`Победил ${winner.nickname}!`);
       setTimeout(() => {
         showScreen(lobbyScreen);
-        if (socket) socket.emit('requestRooms');
+        if (socket) socket.emit('requestRooms', { gameType: currentGame });
       }, 3000);
     }
     renderGameTable(currentPlayers, false, null);
@@ -619,7 +619,7 @@ function connectSocket() {
     showMessage(resultText);
     setTimeout(() => {
       showScreen(lobbyScreen);
-      if (socket) socket.emit('requestRooms');
+      if (socket) socket.emit('requestRooms', { gameType: currentGame });
     }, 3000);
   });
   socket.on('errorMessage', (text) => {
@@ -628,8 +628,9 @@ function connectSocket() {
 }
 
 function renderRoomList(rooms) {
-  roomList.innerHTML = rooms.length
-    ? rooms
+  const filteredRooms = rooms.filter((room) => room.gameType === currentGame);
+  roomList.innerHTML = filteredRooms.length
+    ? filteredRooms
       .map(
         (room) => `<div class="room-card">
             <strong>${room.title}</strong>
@@ -640,7 +641,7 @@ function renderRoomList(rooms) {
           </div>`
       )
       .join('')
-    : '<p>Пока нет доступных комнат. Создайте свою.</p>';
+    : '<p>Пока нет доступных комнат для этой игры. Создайте свою.</p>';
   roomList.querySelectorAll('button[data-room]').forEach((button) => {
     button.addEventListener('click', () => {
       joinRoom(button.dataset.room);
@@ -1237,6 +1238,13 @@ function navigateTo(newScreen, options = {}) {
   const screenId = getScreenId(newScreen);
   showScreen(newScreen);
   saveAppState(screenId, options.gameType, options.roomId);
+  if (newScreen === roomListScreen) {
+    whenSocketReady(() => {
+      if (socket && socket.connected) {
+        socket.emit('requestRooms', { gameType: options.gameType || currentGame });
+      }
+    });
+  }
 }
 
 function whenSocketReady(callback) {
@@ -1416,7 +1424,7 @@ window.addEventListener('load', () => {
   });
 
   backToMenu.addEventListener('click', () => {
-    navigateTo(mainMenu);
+    logout();
   });
 
   backToChooseFromRooms.addEventListener('click', () => {
@@ -1463,7 +1471,7 @@ window.addEventListener('load', () => {
   refreshRooms.addEventListener('click', () => {
     if (!socket) connectSocket();
     if (socket && socket.connected) {
-      socket.emit('requestRooms');
+      socket.emit('requestRooms', { gameType: currentGame });
     }
   });
 

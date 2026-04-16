@@ -298,10 +298,11 @@ function setupGameHandlers(io) {
     });
 
     // Request rooms list handler
-    socket.on('requestRooms', async () => {
+    socket.on('requestRooms', async ({ gameType } = {}) => {
       try {
         const rooms = await roomManager.getAllRooms();
-        socket.emit('roomList', rooms);
+        const filteredRooms = gameType ? rooms.filter((room) => room.gameType === gameType) : rooms;
+        socket.emit('roomList', filteredRooms);
       } catch (error) {
         console.error('Error requesting rooms:', error);
       }
