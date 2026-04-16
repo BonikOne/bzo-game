@@ -144,6 +144,20 @@ function isCheckmate(board, kingColor) {
   return true; // No moves found, it's checkmate
 }
 
+function createPairsBoard() {
+  const values = [];
+  for (let i = 1; i <= 8; i++) {
+    values.push(i, i); // 8 пар
+  }
+  const shuffled = shuffle(values);
+  return shuffled.map((value, index) => ({
+    id: index,
+    value,
+    flipped: false,
+    matched: false
+  }));
+}
+
 // Game event handlers
 function setupGameHandlers(io) {
   console.log('Setting up Socket.IO event handlers...');
@@ -370,7 +384,7 @@ function setupGameHandlers(io) {
           return;
         }
 
-        const requiredPlayers = room.gameType === 'imaginarium' ? 3 : room.gameType === 'chess' ? 2 : 4;
+        const requiredPlayers = room.gameType === 'imaginarium' ? 3 : room.gameType === 'chess' || room.gameType === 'pairs' ? 2 : 4;
         if (room.players.length < requiredPlayers) {
           socket.emit('error', `Нужно минимум ${requiredPlayers} игрок${requiredPlayers === 2 ? 'а' : 'ов'} для начала игры.`);
           return;
@@ -496,6 +510,24 @@ function setupGameHandlers(io) {
               currentTurn: room.currentTurn
             });
           });
+        } else if (room.gameType === 'pairs') {
+          room.pairsBoard = createPairsBoard();
+          room.currentTurn = room.players[0]?.id;
+          room.pairsScores = {};
+          room.players.forEach(player => {
+            room.pairsScores[player.id] = 0;
+          });
+          room.flippedCards = [];
+
+          room.players.forEach((player) => {
+            io.to(player.id).emit('gameStarted', {
+              gameType: 'pairs',
+              players: room.players.map((p) => ({ id: p.id, nickname: p.nickname })),
+              pairsBoard: room.pairsBoard,
+              currentTurn: room.currentTurn,
+              scores: room.pairsScores
+            });
+          });
         } else {
           // Spy game
           room.availableLocations = shuffle(LOCATIONS).slice(0, 25);
@@ -588,6 +620,91 @@ function setupGameHandlers(io) {
       } catch (error) {
         console.error('Error moving chess piece:', error);
         socket.emit('error', 'Не удалось выполнить ход');
+      }
+    });
+
+    socket.on('flipCard', async ({ index }) => {
+      try {
+        const room = await getValidatedRoom(socket, 'pairs');
+        if (!room || room.currentTurn !== socket.id) return;
+
+        if (index < 0 || index >= room.pairsBoard.length) return;
+        const card = room.pairsBoard[index];
+        if (card.flipped || card.matched) return;
+
+        card.flipped = true;
+        room.flippedCards.push(index);
+
+        io.to(room.id).emit('pairsBoardUpdate', {
+          pairsBoard: room.pairsBoard,
+          currentTurn: room.currentTurn,
+          scores: room.pairsScores,
+          flippedCards: room.flippedCards
+        });
+
+        if (room.flippedCards.length === 2) {
+          const [firstIndex, secondIndex] = room.flippedCards;
+          const firstCard = room.pairsBoard[firstIndex];
+          const secondCard = room.pairsBoard[secondIndex];
+
+          if (firstCard.value === secondCard.value) {
+            // Match found
+            firstCard.matched = true;
+            secondCard.matched = true;
+            room.pairsScores[socket.id] = (room.pairsScores[socket.id] || 0) + 1;
+            room.flippedCards = [];
+
+            // Check for winner
+            const totalPairs = room.pairsBoard.filter(c => c.matched).length / 2;
+            if (totalPairs === 8) {
+              room.state = 'finished';
+              const winner = Object.entries(room.pairsScores).reduce((max, [id, score]) => 
+                score > max.score ? { id, score } : max
+              );
+              if (winner) {
+                const winnerPlayer = room.players.find(p => p.id === winner.id);
+                io.to(room.id).emit('pairsBoardUpdate', {
+                  pairsBoard: room.pairsBoard,
+                  currentTurn: room.currentTurn,
+                  scores: room.pairsScores,
+                  winner: { id: winnerPlayer.id, nickname: winnerPlayer.nickname },
+                  flippedCards: room.flippedCards
+                });
+              }
+              await roomManager.updateRoom(room.id, room);
+              return;
+            }
+            // Player continues turn
+            await roomManager.updateRoom(room.id, room);
+            io.to(room.id).emit('pairsBoardUpdate', {
+              pairsBoard: room.pairsBoard,
+              currentTurn: room.currentTurn,
+              scores: room.pairsScores,
+              flippedCards: room.flippedCards
+            });
+          } else {
+            // No match, flip back after delay
+            await roomManager.updateRoom(room.id, room);
+            setTimeout(async () => {
+              firstCard.flipped = false;
+              secondCard.flipped = false;
+              room.flippedCards = [];
+              room.currentTurn = room.players.find(p => p.id !== socket.id)?.id;
+              await roomManager.updateRoom(room.id, room);
+              io.to(room.id).emit('pairsBoardUpdate', {
+                pairsBoard: room.pairsBoard,
+                currentTurn: room.currentTurn,
+                scores: room.pairsScores,
+                flippedCards: room.flippedCards
+              });
+            }, 1500);
+          }
+        } else {
+          await roomManager.updateRoom(room.id, room);
+        }
+      } catch (error) {
+        console.error('Error flipping card:', error);
+        socket.emit('error', 'Не удалось перевернуть карточку');
       }
     });
 

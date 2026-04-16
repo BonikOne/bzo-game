@@ -27,7 +27,7 @@ class RoomManager {
       id: roomId,
       title: `Комната ${roomId.split('-')[2]}`,
       creatorId: creator.id,
-      capacity: gameType === 'chess' ? 2 : 6,
+      capacity: gameType === 'chess' || gameType === 'pairs' ? 2 : 6,
       state: 'waiting',
       gameType,
       players: [{

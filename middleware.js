@@ -41,7 +41,7 @@ const socketLimiter = rateLimit({
 // Input validation schemas
 const nicknameSchema = Joi.string().min(2).max(20).pattern(/^[a-zA-Z0-9_]+$/).required();
 const roomIdSchema = Joi.string().pattern(/^room-\d+-\w+$/).required();
-const gameTypeSchema = Joi.string().valid('spy', 'codenames', 'imaginarium', 'chess').required();
+const gameTypeSchema = Joi.string().valid('spy', 'codenames', 'imaginarium', 'chess', 'pairs').required();
 
 // Input validation middleware
 const validateInput = (req, res, next) => {
