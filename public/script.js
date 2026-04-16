@@ -252,7 +252,7 @@ function selectGame(gameType) {
   document.body.classList.toggle('codenames-theme', gameType === 'codenames');
   document.body.classList.toggle('imaginarium-theme', gameType === 'imaginarium');
   document.body.classList.toggle('chess-theme', gameType === 'chess');
-  showScreen(roomListScreen);
+  navigateTo(roomListScreen, { gameType });
   connectSocket();
 }
 
@@ -269,6 +269,17 @@ function loadNickname() {
   return false;
 }
 
+function loadPlayerId() {
+  const saved = localStorage.getItem(STORAGE_PLAYER_ID);
+  if (saved) {
+    currentPlayerId = saved;
+  } else {
+    currentPlayerId = 'player-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+    localStorage.setItem(STORAGE_PLAYER_ID, currentPlayerId);
+  }
+  console.log('currentPlayerId:', currentPlayerId);
+}
+
 function updateUserLabel() {
   if (currentUserLabel) {
     currentUserLabel.textContent = currentNickname || 'Игрок';
@@ -281,11 +292,18 @@ function logout() {
     socket = null;
   }
   localStorage.removeItem(STORAGE_NICK);
+  localStorage.removeItem(STORAGE_APP_STATE);
+  localStorage.removeItem(STORAGE_ROOM_ID);
+  localStorage.removeItem(STORAGE_GAME_TYPE);
+  localStorage.removeItem(STORAGE_PLAYER_ID);
+  localStorage.removeItem(STORAGE_GAME_TYPE);
   currentNickname = null;
+  currentRoom = null;
   updateUserLabel();
   if (nicknameInput) {
     nicknameInput.value = '';
   }
+  history.replaceState(null, '', window.location.pathname);
   showScreen(landingScreen);
   showMessage('Вы вышли. Введите новый ник, чтобы начать.');
 }
@@ -359,7 +377,6 @@ function connectSocket() {
   socket.on('connect', () => {
     console.log('Socket.IO connected');
     socketErrorLogged = false;
-    currentPlayerId = socket.id;
     socket.emit('requestRooms');
   });
   socket.on('connect_error', (error) => {
@@ -376,14 +393,26 @@ function connectSocket() {
   });
   socket.on('error', (message) => {
     console.log('Server error:', message);
-    showMessage(message);
+    findRoomButton.disabled = false;
+    if (message === 'Room not found') {
+      showMessage('Комната была удалена');
+      navigateTo(roomListScreen);
+    } else {
+      showMessage(message);
+    }
   });
   socket.on('roomList', renderRoomList);
-  socket.on('roomJoined', ({ roomId, title, creatorId, gameType }) => {
+  socket.on('roomJoined', ({ roomId, title, creatorId, gameType, playerId }) => {
+    console.log('Received roomJoined:', roomId, title, 'playerId:', playerId);
     currentRoom = roomId;
     currentGame = gameType || 'spy';
+    if (playerId) {
+      currentPlayerId = playerId;
+      localStorage.setItem(STORAGE_PLAYER_ID, playerId);
+    }
     renderRoomInfo({ title, creatorId, gameType });
-    showScreen(lobbyScreen);
+    findRoomButton.disabled = false;
+    navigateTo(lobbyScreen, { roomId });
   });
   socket.on('roomUpdate', (room) => {
     currentRoom = room.id;
@@ -457,7 +486,7 @@ function connectSocket() {
       currentLocation = location;
       currentLocations = availableLocations && availableLocations.length ? availableLocations : ALL_LOCATIONS;
     }
-    showScreen(tableScreen);
+    navigateTo(tableScreen, { roomId: currentRoom });
     tableChat.innerHTML = '';
     renderGameTable(players, isSpy, location);
     hasInitiatedVote = false;
@@ -574,7 +603,7 @@ function connectSocket() {
       const winnerPlayer = players.find((p) => p.id === winner);
       resultText = winnerPlayer ? `Победитель: ${winnerPlayer.nickname}` : 'Игра окончена';
     } else {
-      const isSpy = socket.id === spyId;
+      const isSpy = currentPlayerId === spyId;
       const resultTexts = {
         spy_found: isSpy ? 'Вы были найдены!' : 'Вы нашли шпиона!',
         spy_guessed: 'Шпион угадал локацию!',
@@ -636,14 +665,14 @@ function renderRoomInfo(room) {
 function renderPlayers(players = [], creatorId, state) {
   const list = players
     .map(
-      (player) => `<li>${player.nickname}${player.id === creatorId ? ' (создатель)' : ''}${player.id === socket?.id ? ' (вы)' : ''}</li>`
+      (player) => `<li>${player.nickname}${player.id === creatorId ? ' (создатель)' : ''}${player.id === currentPlayerId ? ' (вы)' : ''}</li>`
     )
     .join('');
   playersList.innerHTML = `<h3>Игроки</h3><ul>${list}</ul>`;
 }
 
 function renderRoomActions(room) {
-  const isCreator = socket?.id === room.creatorId;
+  const isCreator = currentPlayerId === room.creatorId;
   const minPlayers = room.gameType === 'imaginarium' ? 3 : room.gameType === 'chess' || room.gameType === 'pairs' || room.gameType === 'durak' ? 2 : 4;
   const canStart = room.state === 'waiting' && room.players.length >= minPlayers && isCreator;
   const actionHtml = canStart ? '<button id="startGame" class="primary">Начать игру</button>' : '';
@@ -684,7 +713,7 @@ function renderGameTable(players, isSpy, location) {
   if (currentGame === 'imaginarium') {
     tableTitle.textContent = 'Имаджинариум';
     const leader = currentPlayers.find((p) => p.id === currentLeaderId);
-    const isLeader = socket?.id === currentLeaderId;
+    const isLeader = currentPlayerId === currentLeaderId;
     const heading = currentImaginariumPhase === 'choose'
       ? isLeader ? 'Вы ведущий – выберите карту и напишите ассоциацию' : `Ожидайте, ведущий ${leader?.nickname || 'игрок'} выбирает карту` 
       : currentImaginariumPhase === 'submit'
@@ -926,7 +955,7 @@ function renderGameTable(players, isSpy, location) {
     tableTitle.textContent = 'Найди пару';
     cardsGrid.classList.add('pairs-board');
     const board = currentPairsBoard.length ? currentPairsBoard : Array(16).fill(null).map((_, i) => ({ id: i, value: Math.floor(i / 2) + 1, flipped: false, matched: false }));
-    const isMyTurn = currentPairsTurn === socket?.id;
+    const isMyTurn = currentPairsTurn === currentPlayerId;
     const currentPlayer = currentPlayers.find(p => p.id === currentPairsTurn);
     const myScore = currentPairsScores[socket?.id] || 0;
     const opponentScore = Object.values(currentPairsScores).reduce((sum, score) => sum + score, 0) - myScore;
@@ -966,7 +995,7 @@ function renderGameTable(players, isSpy, location) {
   } else if (currentGame === 'durak') {
     tableTitle.textContent = 'Дурак';
     cardsGrid.classList.add('durak-board');
-    const isMyTurn = currentDurakTurn === socket?.id;
+    const isMyTurn = currentDurakTurn === currentPlayerId;
     const currentPlayer = currentPlayers.find(p => p.id === currentDurakTurn);
     const isAttacker = socket?.id === currentDurakAttackerId;
     const isDefender = socket?.id === currentDurakDefenderId;
@@ -1105,7 +1134,7 @@ function renderGameTable(players, isSpy, location) {
 }
 
 function showVoteList(players, isSpy) {
-  const otherPlayers = players.filter((p) => p.id !== socket.id);
+  const otherPlayers = players.filter((p) => p.id !== currentPlayerId);
   const listHtml = otherPlayers
     .map((p) => `<option value="${p.id}">${p.nickname}</option>`)
     .join('');
@@ -1146,14 +1175,201 @@ function joinRoom(roomId) {
   if (!socket) {
     connectSocket();
   }
-  socket.emit('joinRoom', { nickname: currentNickname, roomId });
+  socket.emit('joinRoom', { nickname: currentNickname, roomId, playerId: currentPlayerId });
 }
 
+// ===== ROUTING SYSTEM =====
+
+const STORAGE_APP_STATE = 'appState';
+const STORAGE_ROOM_ID = 'currentRoomId';
+const STORAGE_GAME_TYPE = 'currentGameType';
+const STORAGE_PLAYER_ID = 'playerId';
+
+function getScreenId(screen) {
+  if (screen === mainMenu) return 'menu';
+  if (screen === chooseScreen) return 'choose';
+  if (screen === roomListScreen) return 'rooms';
+  if (screen === lobbyScreen) return 'lobby';
+  if (screen === tableScreen) return 'table';
+  if (screen === landingScreen) return 'landing';
+  return 'menu';
+}
+
+function getScreenByName(name) {
+  switch (name) {
+    case 'menu': return mainMenu;
+    case 'choose': return chooseScreen;
+    case 'rooms': return roomListScreen;
+    case 'lobby': return lobbyScreen;
+    case 'table': return tableScreen;
+    case 'landing': return landingScreen;
+    default: return mainMenu;
+  }
+}
+
+function saveAppState(screenId, gameType = null, roomId = null) {
+  const state = {
+    screen: screenId,
+    timestamp: Date.now(),
+    gameType: gameType || currentGame,
+    roomId: roomId || currentRoom
+  };
+  // Use pushState для создания истории, но первый раз replaceState
+  const historyFn = history.state ? history.pushState : history.replaceState;
+  historyFn.bind(history)(state, '', getUrlForState(state));
+  localStorage.setItem(STORAGE_APP_STATE, JSON.stringify(state));
+  if (roomId) localStorage.setItem(STORAGE_ROOM_ID, roomId);
+  if (gameType) localStorage.setItem(STORAGE_GAME_TYPE, gameType);
+}
+
+function getUrlForState(state) {
+  const baseUrl = window.location.origin + window.location.pathname;
+  if (state.screen === 'landing') return baseUrl;
+  if (state.screen === 'menu') return baseUrl;
+  if (state.screen === 'choose') return baseUrl + '?screen=choose&game=' + (state.gameType || 'spy');
+  if (state.screen === 'rooms') return baseUrl + '?screen=rooms&game=' + (state.gameType || 'spy');
+  if (state.screen === 'lobby') return baseUrl + '?screen=lobby&room=' + state.roomId;
+  if (state.screen === 'table') return baseUrl + '?screen=table&room=' + state.roomId;
+  return baseUrl;
+}
+
+function navigateTo(newScreen, options = {}) {
+  const screenId = getScreenId(newScreen);
+  showScreen(newScreen);
+  saveAppState(screenId, options.gameType, options.roomId);
+}
+
+function whenSocketReady(callback) {
+  if (socket && socket.connected) {
+    setTimeout(callback, 50);
+  } else if (socket) {
+    socket.once('connect', callback);
+  } else {
+    // Socket не инициализирован, подождём
+    setTimeout(() => whenSocketReady(callback), 100);
+  }
+}
+
+function restoreState() {
+  const saved = localStorage.getItem(STORAGE_APP_STATE);
+  const params = new URLSearchParams(window.location.search);
+  
+  let targetScreen = mainMenu;
+  let screenParam = params.get('screen');
+  
+  // Если пользователь не залогинен, всегда показываем landing
+  if (!currentNickname) {
+    showScreen(landingScreen);
+    return;
+  }
+
+  // Если это root URL без параметров - идём в главное меню
+  if (!screenParam && !params.toString()) {
+    showScreen(mainMenu);
+    return;
+  }
+
+  // Восстанавливаем по URL параметрам (приоритет выше localStorage)
+  if (screenParam === 'choose') {
+    const gameType = params.get('game') || 'spy';
+    currentGame = gameType;
+    targetScreen = chooseScreen;
+  } else if (screenParam === 'rooms') {
+    const gameType = params.get('game') || 'spy';
+    currentGame = gameType;
+    targetScreen = roomListScreen;
+    connectSocket();
+  } else if (screenParam === 'lobby') {
+    const roomId = params.get('room');
+    if (roomId) {
+      currentRoom = roomId;
+      targetScreen = lobbyScreen;
+      connectSocket();
+      // Попытаемся переподключиться к комнате
+      setTimeout(() => {
+        whenSocketReady(() => {
+          socket.emit('rejoinRoom', { roomId, playerId: currentPlayerId });
+          setTimeout(() => socket.emit('requestRoomInfo', { roomId }), 100);
+        });
+      }, 200);
+    } else {
+      targetScreen = mainMenu;
+    }
+  } else if (screenParam === 'table') {
+    const roomId = params.get('room');
+    if (roomId) {
+      currentRoom = roomId;
+      targetScreen = tableScreen;
+      connectSocket();
+      // Присоединяемся к комнате и запрашиваем состояние игры
+      setTimeout(() => {
+        whenSocketReady(() => {
+          socket.emit('rejoinRoom', { roomId, playerId: currentPlayerId });
+          setTimeout(() => socket.emit('requestGameState', { roomId, playerId: currentPlayerId }), 100);
+        });
+      }, 200);
+    } else {
+      targetScreen = mainMenu;
+    }
+  } else if (saved) {
+    // Если нет URL параметров, восстанавливаем из localStorage ТОЛЬКО если кажется что это одна сессия
+    try {
+      const state = JSON.parse(saved);
+      // Проверяем, не слишком ли старое состояние (более 30 минут)
+      const age = Date.now() - state.timestamp;
+      if (age < 1800000) { // 30 минут
+        targetScreen = getScreenByName(state.screen);
+        if (state.gameType) {
+          currentGame = state.gameType;
+        }
+        if (state.roomId) {
+          currentRoom = state.roomId;
+        }
+        
+        if (state.screen === 'rooms' || state.screen === 'lobby') {
+          connectSocket();
+          if (state.screen === 'lobby' && state.roomId) {
+            whenSocketReady(() => {
+              socket.emit('rejoinRoom', { roomId: state.roomId, playerId: currentPlayerId });
+              setTimeout(() => socket.emit('requestRoomInfo', { roomId: state.roomId }), 100);
+            });
+          }
+        } else if (state.screen === 'table') {
+          connectSocket();
+          // Присоединяемся к комнате и запрашиваем состояние игры
+          whenSocketReady(() => {
+            socket.emit('rejoinRoom', { roomId: state.roomId, playerId: currentPlayerId });
+            setTimeout(() => socket.emit('requestGameState', { roomId: state.roomId, playerId: currentPlayerId }), 100);
+          });
+        }
+      } else {
+        targetScreen = mainMenu;
+      }
+    } catch (e) {
+      console.error('Error parsing saved state:', e);
+      targetScreen = mainMenu;
+    }
+  } else {
+    targetScreen = mainMenu;
+  }
+
+  showScreen(targetScreen);
+}
+
+// Обработка кнопок back/forward браузера
+window.addEventListener('popstate', (event) => {
+  if (event.state) {
+    const screen = getScreenByName(event.state.screen);
+    if (event.state.gameType) currentGame = event.state.gameType;
+    if (event.state.roomId) currentRoom = event.state.roomId;
+    showScreen(screen);
+  }
+});
 
 window.addEventListener('load', () => {
+  loadPlayerId();
   if (loadNickname()) {
-    showScreen(mainMenu);
-    connectSocket();
+    restoreState();
   } else {
     showScreen(landingScreen);
   }
@@ -1161,7 +1377,7 @@ window.addEventListener('load', () => {
   // Setup event listeners after DOM is loaded
 
   playButton.addEventListener('click', () => {
-    showScreen(chooseScreen);
+    navigateTo(chooseScreen);
   });
 
   statsButton.addEventListener('click', openStatsModal);
@@ -1200,11 +1416,11 @@ window.addEventListener('load', () => {
   });
 
   backToMenu.addEventListener('click', () => {
-    showScreen(mainMenu);
+    navigateTo(mainMenu);
   });
 
   backToChooseFromRooms.addEventListener('click', () => {
-    showScreen(chooseScreen);
+    navigateTo(chooseScreen, { gameType: currentGame });
   });
 
   function leaveCurrentRoom() {
@@ -1216,25 +1432,30 @@ window.addEventListener('load', () => {
 
   backToRooms.addEventListener('click', () => {
     leaveCurrentRoom();
-    showScreen(roomListScreen);
+    navigateTo(roomListScreen, { gameType: currentGame });
   });
 
   findRoomButton.addEventListener('click', () => {
     console.log('findRoomButton clicked');
     if (!currentNickname) {
-      showMessage('Сначала введите никнейм.');
+      showMessage('Сначала введите никнейм');
       return;
     }
+    if (currentRoom) {
+      showMessage('Вы уже в комнате');
+      return;
+    }
+    findRoomButton.disabled = true;
     if (!socket) connectSocket();
     const nickname = currentNickname || 'Игрок';
     if (socket && socket.connected) {
-      console.log('emitting createOrJoin');
-      socket.emit('createOrJoin', { nickname, gameType: currentGame });
+      console.log('emitting createOrJoin', { nickname, gameType: currentGame, playerId: currentPlayerId });
+      socket.emit('createOrJoin', { nickname, gameType: currentGame, playerId: currentPlayerId });
     } else {
       console.log('waiting for connect');
       socket.once('connect', () => {
         console.log('connected, emitting createOrJoin');
-        socket.emit('createOrJoin', { nickname, gameType: currentGame });
+        socket.emit('createOrJoin', { nickname, gameType: currentGame, playerId: currentPlayerId });
       });
     }
   });
@@ -1258,10 +1479,10 @@ window.addEventListener('load', () => {
     }
     if (!socket) connectSocket();
     if (socket && socket.connected) {
-      socket.emit('joinRoomByCode', { code, nickname: currentNickname });
+      socket.emit('joinRoomByCode', { code, nickname: currentNickname, playerId: currentPlayerId });
     } else {
       socket.once('connect', () => {
-        socket.emit('joinRoomByCode', { code, nickname: currentNickname });
+        socket.emit('joinRoomByCode', { code, nickname: currentNickname, playerId: currentPlayerId });
       });
     }
     joinCodeInput.value = '';

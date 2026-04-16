@@ -226,17 +226,25 @@ function setupGameHandlers(io) {
     console.log('New Socket.IO connection:', socket.id);
 
     // Create or join room handler
-    socket.on('createOrJoin', async ({ nickname, gameType }) => {
+    socket.on('createOrJoin', async ({ nickname, gameType, playerId: clientPlayerId }) => {
       try {
+        let playerId = socket.data.playerId || clientPlayerId;
+        if (!playerId) {
+          playerId = 'player-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+        }
         // If player is already in a room, don't create/join another
         if (socket.data.roomId) {
           const currentRoom = await roomManager.getRoom(socket.data.roomId);
           if (currentRoom) {
+            if (socket.data.playerId) {
+              socket.join(socket.data.playerId);
+            }
             socket.emit('roomJoined', {
               roomId: currentRoom.id,
               title: currentRoom.title,
               creatorId: currentRoom.creatorId,
-              gameType: currentRoom.gameType
+              gameType: currentRoom.gameType,
+              playerId: socket.data.playerId
             });
             const updatedRoom = await roomManager.getRoom(socket.data.roomId);
             io.to(socket.data.roomId).emit('roomUpdate', updatedRoom);
@@ -246,13 +254,25 @@ function setupGameHandlers(io) {
 
         if (!nickname || !gameType) return;
 
-        console.log(`Creating room for ${nickname}, gameType: ${gameType}`);
+        console.log(`Creating room for ${nickname}, gameType: ${gameType}, playerId: ${playerId}`);
         socket.data.nickname = nickname;
         socket.data.gameType = gameType;
+        socket.data.playerId = playerId;
+
+        // Join persistent player room for direct emits
+        socket.join(playerId);
+
+        // Validate inputs
+        if (!playerId || !nickname) {
+          socket.emit('error', 'Invalid parameters: playerId and nickname are required');
+          return;
+        }
 
         // Always create a new room
-        let room = await roomManager.createRoom({ id: socket.id, nickname }, gameType);
+        console.log('Calling createRoom with creator:', { id: playerId, nickname });
+        let room = await roomManager.createRoom({ id: playerId, nickname }, gameType);
 
+        console.log('Room created:', room.id);
         socket.data.roomId = room.id;
         socket.join(room.id);
 
@@ -261,15 +281,19 @@ function setupGameHandlers(io) {
           roomId: room.id,
           title: room.title,
           creatorId: room.creatorId,
-          gameType: room.gameType
+          gameType: room.gameType,
+          playerId: playerId
         });
+
+        console.log('Sent roomJoined to', socket.id);
 
         // Send current room state
         const updatedRoom = await roomManager.getRoom(room.id);
         io.to(room.id).emit('roomUpdate', updatedRoom);
 
       } catch (error) {
-        console.error('Error in createOrJoin:', error);
+        console.error('Error in createOrJoin:', error.message, error.stack);
+        socket.emit('error', 'Failed to create room: ' + error.message);
       }
     });
 
@@ -284,7 +308,7 @@ function setupGameHandlers(io) {
     });
 
     // Join specific room handler
-    socket.on('joinRoom', async ({ nickname, roomId }) => {
+    socket.on('joinRoom', async ({ nickname, roomId, playerId }) => {
       try {
         const room = await roomManager.getRoom(roomId);
         if (!room || room.state !== 'waiting' || room.players.length >= room.capacity) {
@@ -293,33 +317,39 @@ function setupGameHandlers(io) {
         }
 
         // Check if player is already in the room
-        const existingPlayer = room.players.find(p => p.id === socket.id);
+        const existingPlayer = room.players.find(p => p.id === playerId);
         if (existingPlayer) {
           // Player already in room, just update socket data
           socket.data.roomId = roomId;
           socket.data.nickname = nickname;
+          socket.data.playerId = playerId;
           socket.join(roomId);
+          socket.join(playerId);
           socket.emit('roomJoined', {
             roomId: room.id,
             title: room.title,
             creatorId: room.creatorId,
-            gameType: room.gameType
+            gameType: room.gameType,
+            playerId: playerId
           });
           const updatedRoom = await roomManager.getRoom(roomId);
           io.to(roomId).emit('roomUpdate', updatedRoom);
           return;
         }
 
-        await roomManager.joinRoom(roomId, nickname, socket.id);
+        await roomManager.joinRoom(roomId, nickname, playerId);
         socket.data.roomId = roomId;
         socket.data.nickname = nickname;
+        socket.data.playerId = playerId;
         socket.join(roomId);
+        socket.join(playerId);
 
         socket.emit('roomJoined', {
           roomId: room.id,
           title: room.title,
           creatorId: room.creatorId,
-          gameType: room.gameType
+          gameType: room.gameType,
+          playerId: playerId
         });
 
         const updatedRoom = await roomManager.getRoom(roomId);
@@ -331,8 +361,47 @@ function setupGameHandlers(io) {
       }
     });
 
+    // Rejoin room handler (for session restoration, allows joining any state)
+    socket.on('rejoinRoom', async ({ roomId, playerId }) => {
+      try {
+        const room = await roomManager.getRoom(roomId);
+        if (!room) {
+          socket.emit('error', 'Room not found');
+          return;
+        }
+
+        // Check if player is already in the room
+        const existingPlayer = room.players.find(p => p.id === playerId);
+        if (!existingPlayer) {
+          socket.emit('error', 'You are not a member of this room');
+          return;
+        }
+
+        // Player is member, allow rejoin regardless of room state
+        socket.data.roomId = roomId;
+        socket.data.playerId = playerId;
+        socket.join(roomId);
+        socket.join(playerId);
+        
+        socket.emit('roomJoined', {
+          roomId: room.id,
+          title: room.title,
+          creatorId: room.creatorId,
+          gameType: room.gameType,
+          playerId: playerId
+        });
+
+        // Send updated state
+        io.to(roomId).emit('roomUpdate', room);
+
+      } catch (error) {
+        console.error('Error in rejoinRoom:', error);
+        socket.emit('error', 'Failed to rejoin room');
+      }
+    });
+
     // Join room by code handler
-    socket.on('joinRoomByCode', async ({ code, nickname }) => {
+    socket.on('joinRoomByCode', async ({ code, nickname, playerId }) => {
       try {
         const room = await roomManager.getRoom(code);
         if (!room) {
@@ -345,16 +414,19 @@ function setupGameHandlers(io) {
         }
 
         // Check if player is already in the room
-        const existingPlayer = room.players.find(p => p.id === socket.id);
+        const existingPlayer = room.players.find(p => p.id === playerId);
         if (existingPlayer) {
           socket.data.roomId = code;
           socket.data.nickname = existingPlayer.nickname;
+          socket.data.playerId = playerId;
           socket.join(code);
+          socket.join(playerId);
           socket.emit('roomJoined', {
             roomId: room.id,
             title: room.title,
             creatorId: room.creatorId,
-            gameType: room.gameType
+            gameType: room.gameType,
+            playerId: playerId
           });
           const updatedRoom = await roomManager.getRoom(code);
           io.to(code).emit('roomUpdate', updatedRoom);
@@ -363,16 +435,19 @@ function setupGameHandlers(io) {
 
         // If not in room, need nickname - but since it's by code, assume user is logged in
         const finalNickname = nickname || socket.data.nickname || 'Player';
-        await roomManager.joinRoom(code, finalNickname, socket.id);
+        await roomManager.joinRoom(code, finalNickname, playerId);
         socket.data.roomId = code;
         socket.data.nickname = finalNickname;
+        socket.data.playerId = playerId;
         socket.join(code);
+        socket.join(playerId);
 
         socket.emit('roomJoined', {
           roomId: room.id,
           title: room.title,
           creatorId: room.creatorId,
-          gameType: room.gameType
+          gameType: room.gameType,
+          playerId: playerId
         });
 
         const updatedRoom = await roomManager.getRoom(code);
@@ -388,10 +463,11 @@ function setupGameHandlers(io) {
     socket.on('leaveRoom', async () => {
       try {
         const roomId = socket.data.roomId;
+        const playerId = socket.data.playerId || socket.id;
         if (!roomId) return;
 
         socket.leave(roomId);
-        const room = await roomManager.removePlayerFromRoom(roomId, socket.id);
+        const room = await roomManager.removePlayerFromRoom(roomId, playerId);
         delete socket.data.roomId;
 
         if (room) {
@@ -425,7 +501,7 @@ function setupGameHandlers(io) {
         const room = await roomManager.getRoom(roomId);
         if (!room || room.state !== 'waiting') return;
 
-        if (room.creatorId !== socket.id) {
+        if (room.creatorId !== socket.data.playerId) {
           socket.emit('error', 'Только создатель может начать игру.');
           return;
         }
@@ -650,7 +726,7 @@ function setupGameHandlers(io) {
         const roomId = socket.data.roomId;
         const room = await roomManager.getRoom(roomId);
         if (!room || room.state !== 'playing' || room.gameType !== 'chess') return;
-        if (!room.playerColors || room.playerColors[room.currentTurn] !== socket.id) {
+        if (!room.playerColors || room.playerColors[room.currentTurn] !== socket.data.playerId) {
           socket.emit('error', 'Сейчас не ваш ход.');
           return;
         }
@@ -706,7 +782,7 @@ function setupGameHandlers(io) {
     socket.on('flipCard', async ({ index }) => {
       try {
         const room = await getValidatedRoom(socket, 'pairs');
-        if (!room || room.currentTurn !== socket.id) return;
+        if (!room || room.currentTurn !== socket.data.playerId) return;
 
         if (index < 0 || index >= room.pairsBoard.length) return;
         const card = room.pairsBoard[index];
@@ -731,7 +807,7 @@ function setupGameHandlers(io) {
             // Match found
             firstCard.matched = true;
             secondCard.matched = true;
-            room.pairsScores[socket.id] = (room.pairsScores[socket.id] || 0) + 1;
+            room.pairsScores[socket.data.playerId] = (room.pairsScores[socket.data.playerId] || 0) + 1;
             room.flippedCards = [];
 
             // Check for winner
@@ -769,7 +845,7 @@ function setupGameHandlers(io) {
               firstCard.flipped = false;
               secondCard.flipped = false;
               room.flippedCards = [];
-              room.currentTurn = room.players.find(p => p.id !== socket.id)?.id;
+              room.currentTurn = room.players.find(p => p.id !== socket.data.playerId)?.id;
               await roomManager.updateRoom(room.id, room);
               io.to(room.id).emit('pairsBoardUpdate', {
                 pairsBoard: room.pairsBoard,
@@ -790,16 +866,17 @@ function setupGameHandlers(io) {
 
     socket.on('playDurakCard', async ({ cardId, action }) => {
       try {
+        const playerId = socket.data.playerId;
         const room = await getValidatedRoom(socket, 'durak');
-        if (!room || room.currentTurn !== socket.id) return;
+        if (!room || room.currentTurn !== playerId) return;
 
-        const playerHand = room.playerHands[socket.id];
-        const opponentId = room.players.find(p => p.id !== socket.id)?.id;
+        const playerHand = room.playerHands[playerId];
+        const opponentId = room.players.find(p => p.id !== playerId)?.id;
         const opponentHand = room.playerHands[opponentId];
 
         if (action === 'attack') {
           const attackerId = room.attackerId;
-          if (socket.id !== attackerId || room.isAwaitingDefense) return;
+          if (playerId !== attackerId || room.isAwaitingDefense) return;
           
           // Player attacks with a card
           const cardIndex = playerHand.findIndex(card => card.id === cardId);
@@ -827,7 +904,7 @@ function setupGameHandlers(io) {
         } else if (action === 'defend') {
           // Defender defends against attack
           const defenderId = room.defenderId;
-          if (socket.id !== defenderId || !room.isAwaitingDefense) return;
+          if (playerId !== defenderId || !room.isAwaitingDefense) return;
           if (room.attackCards.length === 0) return;
           
           const cardIndex = playerHand.findIndex(card => card.id === cardId);
@@ -851,7 +928,7 @@ function setupGameHandlers(io) {
         } else if (action === 'take') {
           // Defender takes all cards from table
           const defenderId = room.defenderId;
-          if (socket.id !== defenderId || !room.isAwaitingDefense) return;
+          if (socket.data.playerId !== defenderId || !room.isAwaitingDefense) return;
 
           room.tableCards.forEach(card => playerHand.push(card));
           room.tableCards = [];
@@ -875,7 +952,7 @@ function setupGameHandlers(io) {
         } else if (action === 'pass') {
           // Attacker finishes the round after successful defense
           const attackerId = room.attackerId;
-          if (socket.id !== attackerId || room.isAwaitingDefense) return;
+          if (playerId !== attackerId || room.isAwaitingDefense) return;
 
           room.tableCards = [];
           room.attackCards = [];
@@ -899,7 +976,7 @@ function setupGameHandlers(io) {
         // Check if player has no cards left
         if (playerHand.length === 0 && room.durakDeck.length === 0) {
           room.state = 'finished';
-          const winner = room.players.find(p => p.id === socket.id);
+          const winner = room.players.find(p => p.id === socket.data.playerId);
           io.to(room.id).emit('gameMessage', { system: true, text: `${winner.nickname} победил!` });
         }
 
@@ -923,12 +1000,126 @@ function setupGameHandlers(io) {
       }
     });
 
+    // Request current game state for restored sessions
+    socket.on('requestGameState', async ({ roomId, playerId }) => {
+      try {
+        if (!roomId) return;
+        socket.data.roomId = roomId;
+        const room = await roomManager.getRoom(roomId);
+        if (!room || room.state !== 'playing') return;
+
+        // Send full game state to restored player
+        const player = room.players.find(p => p.id === playerId);
+        if (!player) return;
+
+        const playerData = {
+          gameType: room.gameType,
+          players: room.players,
+          currentTurn: room.currentTurn
+        };
+
+        if (room.gameType === 'durak') {
+          socket.emit('gameStarted', {
+            gameType: 'durak',
+            hand: room.playerHands[playerId] || [],
+            tableCards: room.tableCards || [],
+            currentTurn: room.currentTurn,
+            deckCount: room.durakDeck.length,
+            trumpSuit: room.trumpSuit,
+            attackerId: room.attackerId,
+            defenderId: room.defenderId,
+            isAwaitingDefense: room.isAwaitingDefense,
+            players: room.players
+          });
+        } else if (room.gameType === 'codenames') {
+          const playerTeam = Object.keys(room.teams).find(team => room.teams[team].some(p => p.id === playerId));
+          socket.emit('gameStarted', {
+            gameType: 'codenames',
+            players: room.players,
+            words: room.words || [],
+            currentTeam: room.currentTeam,
+            isCaptain: socket.data.playerId === room.captains.red || socket.data.playerId === room.captains.blue,
+            playerTeam: playerTeam,
+            teamCaptains: room.captains,
+            keyMap: room.keyMap || [],
+            revealed: room.revealed || [],
+            teams: room.teams,
+            phase: room.phase,
+            hint: room.hint,
+            phaseTimer: room.phaseTimer
+          });
+        } else if (room.gameType === 'chess') {
+          socket.emit('gameStarted', {
+            gameType: 'chess',
+            players: room.players,
+            playerColor: room.players[0]?.id === playerId ? 'white' : 'black',
+            chessBoard: room.chessBoard || [],
+            currentTurn: room.currentTurn
+          });
+        } else if (room.gameType === 'pairs') {
+          socket.emit('gameStarted', {
+            gameType: 'pairs',
+            players: room.players,
+            pairsBoard: room.pairsBoard || [],
+            currentTurn: room.currentTurn,
+            scores: room.pairsScores || {}
+          });
+        } else if (room.gameType === 'imaginarium') {
+          const isLeader = playerId === room.leaderId;
+          socket.emit('gameStarted', {
+            gameType: 'imaginarium',
+            players: room.players,
+            hand: room.imaginariumHands[playerId] || [],
+            leaderId: room.leaderId,
+            phase: room.imaginariumPhase,
+            association: room.imaginariumAssociation,
+            tableCards: room.imaginariumTable || [],
+            scores: room.imaginariumScores || {},
+            round: room.imaginariumRound,
+            isLeader: isLeader
+          });
+        } else {
+          socket.emit('gameStarted', {
+            gameType: 'spy',
+            isSpy: player.isSpy,
+            location: room.location,
+            players: room.players,
+            availableLocations: room.availableLocations
+          });
+        }
+      } catch (error) {
+        console.error('Error requesting game state:', error);
+      }
+    });
+
+    // Request room info for lobby restoration
+    socket.on('requestRoomInfo', async ({ roomId }) => {
+      try {
+        if (!roomId) return;
+        const room = await roomManager.getRoom(roomId);
+        if (!room) return;
+
+        socket.emit('roomUpdate', {
+          id: room.id,
+          title: room.title,
+          creatorId: room.creatorId,
+          gameType: room.gameType,
+          state: room.state,
+          players: room.players,
+          capacity: room.capacity,
+          chat: room.chat || []
+        });
+      } catch (error) {
+        console.error('Error requesting room info:', error);
+      }
+    });
+
     socket.on('sendHint', async ({ hint }) => {
       try {
         const room = await getValidatedRoom(socket, 'codenames', 'hint');
         if (!room) return;
 
-        const isCaptain = socket.id === room.captains.red || socket.id === room.captains.blue;
+        const isCaptain = socket.data.playerId === room.captains.red || socket.data.playerId === room.captains.blue;
         if (!isCaptain) return;
 
         if (!hint || typeof hint !== 'string' || hint.trim().length === 0) return;
@@ -953,13 +1144,13 @@ function setupGameHandlers(io) {
       try {
         const room = await getValidatedRoom(socket, 'imaginarium');
         if (!room || room.phase !== 'choose') return;
-        if (socket.id !== room.leaderId) return;
+        if (socket.data.playerId !== room.leaderId) return;
         const hand = room.imaginariumHands?.[socket.id] || [];
         if (index < 0 || index >= hand.length) return;
         if (!association || typeof association !== 'string' || !association.trim()) return;
 
-        room.chosenCard = { playerId: socket.id, nickname: socket.data.nickname, card: hand[index] };
-        room.imaginariumHands[socket.id] = hand.filter((_, i) => i !== index);
+        room.chosenCard = { playerId: socket.data.playerId, nickname: socket.data.nickname, card: hand[index] };
+        room.imaginariumHands[socket.data.playerId] = hand.filter((_, i) => i !== index);
         room.association = association.trim();
         room.phase = 'submit';
         room.phaseTimer = 0;
@@ -985,13 +1176,13 @@ function setupGameHandlers(io) {
       try {
         const room = await getValidatedRoom(socket, 'imaginarium', 'submit');
         if (!room) return;
-        if (socket.id === room.leaderId) return;
-        const hand = room.imaginariumHands?.[socket.id] || [];
+        if (socket.data.playerId === room.leaderId) return;
+        const hand = room.imaginariumHands?.[socket.data.playerId] || [];
         if (index < 0 || index >= hand.length) return;
 
         const card = hand[index];
-        room.imaginariumHands[socket.id] = hand.filter((_, i) => i !== index);
-        room.submissions[socket.id] = { playerId: socket.id, nickname: socket.data.nickname, card };
+        room.imaginariumHands[socket.data.playerId] = hand.filter((_, i) => i !== index);
+        room.submissions[socket.data.playerId] = { playerId: socket.data.playerId, nickname: socket.data.nickname, card };
 
         const expected = room.players.length - 1;
         if (Object.keys(room.submissions).length >= expected && room.chosenCard) {
@@ -1026,8 +1217,8 @@ function setupGameHandlers(io) {
       try {
         const room = await getValidatedRoom(socket, 'imaginarium', 'reveal');
         if (!room) return;
-        if (socket.id === room.leaderId) return;
-        if (room.votes?.[socket.id] != null) return;
+        if (socket.data.playerId === room.leaderId) return;
+        if (room.votes?.[socket.data.playerId] != null) return;
 
         const tableCard = room.tableCards?.[tableIndex];
         if (!tableCard) return;
@@ -1405,7 +1596,7 @@ function setupGameHandlers(io) {
         const room = await getValidatedRoom(socket);
         if (!room) return;
 
-        if (socket.id !== room.spyId) {
+        if (socket.data.playerId !== room.spyId) {
           return socket.emit('errorMessage', 'Только шпион может угадывать локацию.');
         }
 
@@ -1477,14 +1668,23 @@ function setupGameHandlers(io) {
     socket.on('disconnect', async () => {
       try {
         const roomId = socket.data.roomId;
-        console.log(`Player ${socket.id} disconnected from room ${roomId}`);
+        const disconnectedPlayerId = socket.data.playerId || socket.id;
+        console.log(`Player ${socket.id} disconnected from room ${roomId} (playerId: ${disconnectedPlayerId})`);
         if (!roomId) return;
 
         const room = await roomManager.getRoom(roomId);
         if (!room) return;
 
-        room.players = room.players.filter((player) => player.id !== socket.id);
-        if (room.creatorId === socket.id && room.players.length > 0) {
+        const playerStillInRoom = room.players.some((player) => player.id === disconnectedPlayerId);
+        if (playerStillInRoom && socket.data.playerId) {
+          console.log(`Preserving persistent player ${disconnectedPlayerId} in room ${roomId} after disconnect`);
+          // Keep the player in the room so refresh/reconnect can restore session.
+          delete socket.data.roomId;
+          return;
+        }
+
+        room.players = room.players.filter((player) => player.id !== disconnectedPlayerId);
+        if (room.creatorId === disconnectedPlayerId && room.players.length > 0) {
           room.creatorId = room.players[0].id;
         }
 

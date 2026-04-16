@@ -64,11 +64,18 @@ class RoomManager {
 
     try {
       if (this.useRedis) {
-        await this.redis.set(`room:${roomId}`, JSON.stringify(this.serializeRoom(room)));
-        await this.redis.expire(`room:${roomId}`, 60 * 60); // 1 hour TTL
+        try {
+          await this.redis.set(`room:${roomId}`, JSON.stringify(this.serializeRoom(room)));
+          await this.redis.expire(`room:${roomId}`, 60 * 60); // 1 hour TTL
+          console.log('Room saved to Redis:', roomId);
+        } catch (redisError) {
+          console.error('Redis operation failed, falling back to in-memory:', redisError.message);
+          this.inMemoryRooms.set(roomId, room);
+        }
       } else {
         this.inMemoryRooms.set(roomId, room);
       }
+      console.log('Room created successfully:', roomId);
       return room;
     } catch (error) {
       console.error('Error creating room:', error);
@@ -172,19 +179,19 @@ class RoomManager {
   }
 
   // Join existing room
-  async joinRoom(roomId, nickname, socketId) {
+  async joinRoom(roomId, nickname, playerId) {
     try {
       const room = await this.getRoom(roomId);
       if (!room) return false;
 
       // Check if player is already in the room
-      const existingPlayer = room.players.find(p => p.id === socketId);
+      const existingPlayer = room.players.find(p => p.id === playerId);
       if (existingPlayer) {
         return true; // Already in room
       }
 
       room.players.push({
-        id: socketId,
+        id: playerId,
         nickname,
         isReady: false,
         team: null,
